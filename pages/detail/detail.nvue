@@ -513,7 +513,7 @@
 						}
 					}
 					
-					let url = getApp().globalData.apiUrl+'/add_favorite.php?VID='+this.video.VID+'&UID=7757915&VUID='+this.video.VUID
+					/* let url = getApp().globalData.apiUrl+'/add_favorite.php?VID='+this.video.VID+'&UID=7757915&VUID='+this.video.VUID
 					console.log(url);
 					uni.request({
 					    url: url,
@@ -538,10 +538,14 @@
 						fail: (err) => {
 							console.log(err.errMsg);
 						}
-					});
+					}); */
 					let res = await this.saveCollectVideo2DB()
 					if (res == '1') {
 						this.isCollected=1
+						uni.showToast({
+							title: '收藏成功',
+							position:'bottom'
+						});
 					}
 					console.log(res)
 				}
