@@ -1,0 +1,460 @@
+<template>
+	<view class="page-news">
+		<!-- <view :style="{ height: iStatusBarHeight + 'px'}" style="background-color: #000000;"></view> -->
+		<!-- #ifndef MP-QQ -->
+		<uni-list class="listview" style="top:1rpx" :enableBackToTop="true" :scroll-y="true" >
+            <uni-refresh class="refresh" @refresh="onrefresh" @pullingdown="onpullingdown" :display="refreshing ? 'show' : 'hide'">
+                <div class="refresh-view">
+                    <image class="refresh-icon" :src="refreshIcon" :style="{width: (refreshing || pulling) ? 0: '32px'}"
+                        :class="{'refresh-icon-active': refreshFlag}"></image>
+                    <uni-load-more v-if="refreshing" class="loading-icon" status="loading" :contentText="loadingMoreText"></uni-load-more>
+                    <text class="loading-text">{{refreshText}}</text>
+                </div>
+            </uni-refresh>
+			<uni-cell style="display: flex;flex-direction: row;align-items: center;justify-content: center;">
+				<view style="display: block;font-size: 14px;background-color: #f8f8f8;height: 36px;display: flex;justify-content: center;border-radius: 10%;width: 150rpx;align-items: center;">
+					<picker @change="bindPickerChange" :value="index" :range="array" range-key="name">
+						<view class="uni-input">{{array[index].name}}</view>
+					</picker>
+				</view>
+				<view style="width: 500rpx;">
+					<uni-search-bar clearButton="auto" cancelButton="none" @confirm="search" @input="inputSearchWord" @cancel="cancelSearch" />
+				</view>
+			</uni-cell>
+			<uni-cell v-if="total>0">
+				 <text class="video_num">{{total}}视频</text>
+			</uni-cell>
+			<!-- 模式1 -->
+            <uni-cell v-for="(item, index) in dataList" :key="item.id" v-if="!collectModelValue">
+                <news-item :newsItem="item" @close="closeItem(index)" @click="goDetail(item)"></news-item>
+            </uni-cell>
+			<!-- 模式2 -->
+			<uni-cell  v-if="collectModelValue">
+				<view class="content" v-if="collectModelValue">
+					<view class="video_content" v-for="(item, index) in dataList" :key="index">
+						<image class="image" :src="item.imageUrl" @click="goDetail(item)"></image>
+					</view>
+				</view>
+			</uni-cell>
+			<uni-cell>
+				<view class="page-div">
+					<uni-pagination title=" " @change="changePage" show-icon="true" :pageSize="pageSize" :total="total" :current="current"></uni-pagination>
+				</view>
+			</uni-cell>
+            </uni-list>
+            <!-- #endif -->
+            <no-data class="no-data" v-if="isNoData" @retry="loadMore"></no-data>
+	</view>
+</template>
+
+<script>
+	import {
+		friendlyDate,decrypt,encrypt
+	} from '@/common/util.js';
+
+	import uniSearchBar from '@/components/uni-search-bar/uni-search-bar.vue'
+	import uniPagination from '@/components/uni-pagination/uni-pagination.vue'
+	import uniList from '@/components/uni-list.vue';
+	import uniCell from '@/components/uni-cell.vue';
+	import uniRefresh from '@/components/uni-refresh.vue';
+	import uniLoadMore from '@/components/uni-load-more.vue';
+	import noData from '@/components/nodata.nvue';
+	import newsItem from '@/pages/news/news-item.nvue';
+
+	export default {
+		components: {
+			uniList,
+			uniCell,
+			uniRefresh,
+			uniLoadMore,
+			noData,
+			newsItem,
+			uniPagination
+		},
+		data() {
+			return {
+				searchVal:'',
+				collectModelValue:true,
+				dataList: [],
+				navigateFlag: false,
+				pulling: false,
+				refreshing: false,
+				refreshFlag: false,
+				refreshText: "",
+				isLoading: false,
+				loadingText: '加载中...',
+				isNoData: false,
+				pulling: false,
+				current:1,
+				pageSize:100,
+				angle: 0,
+				page: 1,
+				array: [{name:'评分',sortValue:'sort'},{name: '日期',sortValue:'create_date'},
+					{name:'观看数',sortValue:'view_num'}, {name:'收藏数',sortValue:'collecte_num'}, {name:'评论数',sortValue:'comment_num'}],
+				index: 1,
+				loadingMoreText: {
+					contentdown: '',
+					contentrefresh: '',
+					contentnomore: ''
+				},
+				iStatusBarHeight:0,
+				refreshIcon: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAMAAABg3Am1AAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAB5QTFRFcHBw3Nzct7e39vb2ycnJioqK7e3tpqam29vb////D8oK7wAAAAp0Uk5T////////////ALLMLM8AAABxSURBVHja7JVBDoAgDASrjqj//7CJBi90iyYeOHTPMwmFZrHjYyyFYYUy1bwUZqtJIYVxhf1a6u0R7iUvWsCcrEtwJHp8MwMdvh2amHduiZD3rpWId9+BgPd7Cc2LIkPyqvlQvKxKBJ//Qwq/CacAAwDUv0a0YuKhzgAAAABJRU5ErkJggg=="
+			}
+		},
+		created() {
+			this.pullTimer = null;
+			this.total=0
+			this.requestParams = {
+				title:'',
+				category: 12,
+				sortProperty:'sort',
+				page: this.page,
+				pageSize: 100
+			};
+		},
+		onShow(){
+			this.collectModelValue = getApp().globalData.myCollectModel
+		},
+		onLoad() {
+			this.iStatusBarHeight = uni.getSystemInfoSync().statusBarHeight
+		},
+		onHide() {
+			uni.hideLoading();
+		},
+		onReady(){
+			this.loadData(12,true);
+		},
+		onBackPress() {
+			// #ifdef APP-PLUS
+			plus.key.hideSoftKeybord();
+			// #endif
+		},
+		methods: {
+			search(res) {
+				this.requestParams.title=res.value;
+				this.page=1;
+				this.loadData(12,true);
+			},
+			inputSearchWord(res) {
+				this.searchVal = res.value
+			},
+			cancelSearch(res) {
+				this.searchVal='';
+				this.requestParams.title='';
+				this.page=1;
+				this.loadData(12,true);
+			},
+			bindPickerChange(e) {
+				this.index = e.detail.value
+				this.page=1;
+				this.loadData(12,true);
+			},
+			scroll(e,s){
+				console.log("e: " + e);
+				console.log("s: " + s);
+			},
+			changePage(e){
+				console.log(e)
+				this.page = e.current
+				this.current = e.current
+				
+				this.loadData(12,true);
+			},
+			getUserId(){
+				let userInfo = uni.getStorageSync('userInfo');
+				let userId = ''
+				if (userInfo!='') {
+					let userInfoJson=JSON.parse(userInfo)
+					userId = userInfoJson.id;
+				}
+				console.log("userId: " + userId);
+				return userId;
+			},
+			async getTotalNum(){
+				return new Promise(resolve => {
+					plus.sqlite.selectSql({
+						name: 'video',
+						sql: 'select count(*) AS countNum from (select DISTINCT video_key from video)a',
+						success: function(e) {
+							console.log(e)
+							let total = e[0].countNum
+							resolve(total)
+						},
+						fail: function(e) {
+							let total = 0
+							resolve(total)
+						}
+					});
+				});
+			},
+			async getVideo(){
+				let sortValue = this.array[this.index].sortValue
+				let m = this.page-1
+				let sql ="select title,datetime(create_date/1000, 'unixepoch') AS createDate,source_url AS sourceUrl,image_url AS imageUrl,ext_info AS extInfo,link,video_key AS videoKey,sort from video"
+				if (this.searchVal !='') {
+					sql = sql + " where title like '%"+this.searchVal+"%'"
+				}
+				sql = sql + " order by "+sortValue+" desc"
+				if ( sortValue != 'create_date') {
+					sql = sql + ",create_date desc"
+				}
+				sql = sql+" limit "+m+",100"
+				return new Promise(resolve => {
+					plus.sqlite.selectSql({
+						name: 'video',
+						sql: sql,
+						success: function(e) {
+							resolve(e)
+						},
+						fail: function(e) {
+							console.log(e)
+						}
+					});
+				});
+			},
+			async loadData(index,refresh) {
+				// #ifdef APP-PLUS
+				if(this.isOpenDB()){
+					let totalNum = await this.getTotalNum()
+					this.total = totalNum
+					let videos = await this.getVideo()
+					if(this.dataList.length == 0){
+						this.dataList = videos
+					}else{
+						this.dataList = []
+						this.dataList = videos
+					}
+				}
+				// #endif
+			},
+			openDB() {
+				// #ifdef APP-PLUS
+				plus.sqlite.openDatabase({
+					name: 'video',
+					path: '_doc/marud1024.db',
+					success: function(e) {
+						return true
+					},
+					fail: function(e) {
+						console.log('打开数据库marud1024.db失败: ' + JSON.stringify(e));
+						return false
+					}
+				});
+				// #endif
+			},
+			isOpenDB() {
+				// #ifdef APP-PLUS
+				if (
+					plus.sqlite.isOpenDatabase({
+						name: 'video',
+						path: '_doc/marud1024.db',
+					})
+				) {
+					return true
+					console.log('db Opened!');
+				} else {
+					return this.openDB()
+					console.log('db Unopened!');
+				}
+				// #endif
+			},
+			loadMore(e) {
+				this.page = this.page+1
+				this.current=this.page+1
+				this.loadData( this.nid,true);
+			},
+			clear() {
+				this.dataList.length = 0;
+				this.requestParams.minId = 0;
+			},
+			goDetail(detail) {
+				if (this.navigateFlag) {
+					return;
+				}
+				this.navigateFlag = true;
+				uni.navigateTo({
+					url: '/pages/detail/detail?query=' + encodeURIComponent(JSON.stringify(detail))
+				});
+				setTimeout(() => {
+					this.navigateFlag = false;
+				}, 200)
+			},
+			closeItem(index) {
+				uni.showModal({
+					content: '不感兴趣？',
+					success: (res) => {
+						if (res.confirm) {
+							this.dataList.splice(index, 1);
+						}
+					}
+				})
+			},
+			refreshData() {
+				if (this.isLoading) {
+					return;
+				}
+				this.dataList = [];
+				this.pulling = true;
+				this.refreshing = true;
+				this.refreshText = "正在刷新...";
+				this.loadData(this.nid,true);
+			},
+			onrefresh(e) {
+				this.refreshData();
+			},
+			onpullingdown(e) {
+				if (this.refreshing) {
+					return;
+				}
+
+				// var angle = (e.pullingDistance) / e.viewHeight * 180;
+				// if (angle > 180) {
+				// 	angle = 180;
+				// }
+				// tab.angle = angle;
+				this.page = 0
+				this.current=this.page+1
+				this.pulling = false;
+				if (Math.abs(e.pullingDistance) > Math.abs(e.viewHeight)) {
+					this.refreshFlag = true;
+					this.refreshText = "释放立即刷新";
+				} else {
+					this.refreshFlag = false;
+					this.refreshText = "下拉可以刷新";
+				}
+			},
+			newGuid() {
+				let s4 = function() {
+					return (65536 * (1 + Math.random()) | 0).toString(16).substring(1);
+				}
+				return (s4() + s4() + "-" + s4() + "-4" + s4().substr(0, 3) + "-" + s4() + "-" + s4() + s4() + s4()).toUpperCase();
+			}
+		}
+	}
+</script>
+
+<style scoped>
+	.video_num{
+		font-size: 32rpx;
+		color: #666666;
+		padding-left: 20rpx;
+		padding-top: 3rpx;
+		padding-bottom: 3rpx;
+	}
+	.page-div{
+		position:fixed;
+		width: 750rpx;
+		z-index:10;
+		bottom: 0;
+		background-color: #f0f0f0;
+	}
+	.no-data {
+		flex: 1;
+		position: absolute;
+		left: 0;
+		top: 0;
+		right: 0;
+		bottom: 0;
+		z-index: 10;
+	}
+
+	.page-news {
+		flex: 1;
+		flex-direction: column;
+		position: absolute;
+		left: 0;
+		top: 0;
+		right: 0;
+		bottom: 0;
+	}
+
+	.listview {
+		position: absolute;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		/* #ifndef APP-NVUE */
+		display: flex;
+		flex-direction: column;
+		/* #endif */
+		/* #ifndef MP-ALIPAY */
+		flex-direction: column;
+		/* #endif */
+	}
+
+	.refresh {
+		justify-content: center;
+	}
+
+	.refresh-view {
+		/* #ifndef APP-NVUE */
+		display: flex;
+		/* #endif */
+		width: 750rpx;
+		height: 64px;
+		flex-direction: row;
+		flex-wrap: nowrap;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.refresh-icon {
+		width: 32px;
+		height: 32px;
+		transition-duration: .5s;
+		transition-property: transform;
+		transform: rotate(0deg);
+		transform-origin: 15px 15px;
+	}
+
+	.refresh-icon-active {
+		transform: rotate(180deg);
+	}
+
+	.loading-icon {
+		width: 28px;
+		height: 28px;
+		margin-right: 5px;
+		color: gray;
+	}
+
+	.loading-text {
+		margin-left: 2px;
+		font-size: 16px;
+		color: #999999;
+	}
+
+	.loading-more {
+		align-items: center;
+		justify-content: center;
+		padding-top: 14px;
+		padding-bottom: 14px;
+		text-align: center;
+	}
+
+	.loading-more-text {
+		font-size: 28upx;
+		color: #999;
+	}
+	.content{
+	}
+	
+	
+	
+	.image{
+		height: 260upx;
+	}
+	.content{
+		display: flex;
+		flex-direction: row;
+		width: 750upx;
+		flex-wrap: wrap;
+	}
+	.video_content{
+		padding: 3 3 3 3;
+		width: 248upx;
+	}
+	.title{
+		font-size: 8upx;
+	}
+</style>

@@ -1,0 +1,392 @@
+<template>
+	<view class="container">
+		<view class="logo"  @tap="goLogin()">
+			<!-- login ? userInfo.avatarUrl :avatarUrl -->
+			<view class="logo-img-view">
+				<image class="logo-img" src="/static/mine_def_touxiang_3x.png"></image>
+			</view>
+			<!-- <view class="logo-title" :hover-class="!login ? 'logo-hover' : ''">
+					<view class="user-name"><text class="user-name"></text></view>
+					<view class="user-id" v-if="login"><text class="user-name">{{login?userInfo.uname:'请登录'}}(id:{{userInfo.uid}})</text></view>
+			</view> -->
+		</view>
+		<uni-list>
+			<uni-list-item :show-extra-icon="true" :extra-icon="extraIcon1"  :show-badge="true" title="我的收藏" :badge-text="totalNum" @tap="navigateToPage('/pages/info/mycollect2')"/>
+<!-- 			<uni-list-item :show-extra-icon="true" :extra-icon="extraIcon1"  :show-badge="true" title="我的收藏" :badge-text="totalOnline" @tap="navigateToPage('/pages/info/mycollect')"/>
+ -->		
+			<uni-list-item :show-extra-icon="true" :extra-icon="extraIcon2"  :show-badge="true" title="本地视频" :badge-text="localTotalNum" @tap="goLocal()"/>
+			<uni-list-item :show-extra-icon="true" :extra-icon="extraIcon4" title="常见问题" @tap="navigateToPage('/pages/setting/question')"/>
+			<uni-list-item :show-extra-icon="true" :extra-icon="extraIcon5" title="检查更新" @tap="checkUpdate('1')"/>
+			<uni-list-item v-if="login" :show-extra-icon="true" :extra-icon="extraIcon6" title="退出登录" @tap="exitLogin()"/>
+		</uni-list>
+		<view style="display: flex;justify-content: center;margin-top: 80rpx;align-items: center;">
+			<button type="default" @tap="goGithub" style="width: 400rpx;background-color: #ffffff;height: 80rpx;color: #FFFFFF;">
+				点击跳转github
+			</button>
+		</view>
+	</view>
+</template>
+
+<script>
+	import uniList from '@/components/uni-list/uni-list.vue'
+	import uniListItem from '@/components/uni-list-item/uni-list-item.vue'
+	import htmlParser from '@/common/html-parser'
+	export default {
+		data() {
+			return {
+				login: false,
+				localTotalNum:0,
+				totalNum:0,
+				totalOnline:0,
+				userInfo:{
+					uid:'',
+					uname:''
+				},
+				extraIcon1: {
+					color: '#007aff',
+					size: '22',
+					type: 'heart-filled'
+				},
+				extraIcon2: {
+					color: '#007aff',
+					size: '22',
+					type: 'download-filled'
+				},
+				extraIcon3: {
+					color: '#007aff',
+					size: '22',
+					type: 'image-filled'
+				},
+				extraIcon4: {
+					color: '#007aff',
+					size: '22',
+					type: 'help'
+				},
+				extraIcon5: {
+					color: '#007aff',
+					size: '22',
+					type: 'reload'
+				},
+				extraIcon6: {
+					color: '#007aff',
+					size: '22',
+					type: 'minus'
+				},
+			}
+		},
+		onNavigationBarButtonTap(e) {
+			uni.navigateTo({
+				url: '/pages/setting/moreSet'
+			});
+		},
+		onReady() {
+			this.checkUpdate('0')
+		},
+		onShow() {
+			this.listFiles()
+			this.getTotalCollectVideoNum()
+			// this.getTotalOnline()
+			let userInfo = uni.getStorageSync('userInfo');
+			let userId = ''
+			if (userInfo!='') {
+				this.login = true
+				let userInfoJson=JSON.parse(userInfo)
+				this.userInfo = userInfoJson
+			}
+			this.backupDB()
+		},
+		methods: {
+			backupDB(){
+				let filename = '_doc/marud1024.db'
+				plus.io.resolveLocalFileSystemURL(filename, (entry) => {
+					let localPath = plus.io.convertLocalFileSystemURL(filename);
+					console.log("localPath:"+localPath)
+					this.listDBFile(localPath)
+				}, (e) => {
+					console.log("localPath not exists:"+filename)
+				})
+			},
+			listDBFile(path){
+				var environment = plus.android.importClass("android.os.Environment");
+				var flag = environment.getExternalStorageState() === environment.MEDIA_MOUNTED;
+				var sdRoot = environment.getExternalStorageDirectory();
+				var File = plus.android.importClass("java.io.File");
+				path = path.substring(0,path.lastIndexOf('/'))
+				var fd = new File(path);
+				var files = plus.android.invoke(fd,"listFiles");
+				console.log('db file num: '+files.length);
+				var fileArray = new Array(files.length);
+				for (var i = 0; i < files.length; i++) {
+					var title = plus.android.invoke(files[i],"getName");
+					console.log(title);
+				}
+			},
+			
+			exitLogin(){
+			},
+			getSimpleText(html){
+				let re1 = new RegExp("<.+?>","g");//匹配html标签的正则表达式，"g"是搜索匹配多个符合的内容
+				let msg = html.replace(re1,'');//执行替换成空字符
+				msg = msg.replace(new RegExp(/&nbsp;/g),' ').replace(/[\r\n]/g," ").replace(/\ +/g," ")
+				return msg;
+			},
+			goLogin(){
+				// this.navigateToPage('/pages/info/login')
+			},
+			openDB(){
+				// #ifdef APP-PLUS
+				if (
+					plus.sqlite.isOpenDatabase({
+						name: 'video',
+						path: '_doc/marud1024.db',
+					})
+				) {
+					
+				} else {
+					plus.sqlite.openDatabase({
+						name: 'video',
+						path: '_doc/marud1024.db',
+						success: function(e) {
+						},
+						fail: function(e) {
+							console.log(e)
+						}
+					});
+				}
+				// #endif
+			},
+			getIp(){
+				return Math.floor(Math.random()*255)+'.'+Math.floor(Math.random()*255)+'.'+Math.floor(Math.random()*255)+'.'+Math.floor(Math.random()*255);
+			},
+			getTotalOnline(){
+				
+				uni.request({
+					url:getApp().globalData.apiUrl+'/my_favour.php' ,
+					data: {},
+					header: {
+							'user-agent': 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.100 Safari/537.36', //自定义请求头信息
+							//'X-Forwarded-For':this.getIp(),
+							'Referer':getApp().globalData.apiUrl+'/index.php',
+							'Accept-Language':'zh-CN,zh;q=0.8,en-US;q=0.6,en;q=0.4'
+					},
+					success: (res) => {
+						let statusCode = res.statusCode
+						if (statusCode == 200) {
+							let total = this.getTotal(res.data)
+							this.totalOnline = total
+						}
+					},
+					fail: (err) => {
+						
+						console.log(err.errMsg)
+					}
+					})
+			},
+			getTotal(html){
+				let doc = htmlParser(html.toString().trim());
+				let pagingnav = doc.getElementsByClassName('login_register_header')[0];
+				let str = pagingnav.innerHTML
+				str = this.getSimpleText(str)
+				str = str.substring(str.lastIndexOf('的'),str.length)
+				str = str.replace(/[^0-9]/ig,"")
+				return str
+			},
+			goGithub(){
+				// #ifdef APP-PLUS
+					plus.runtime.openURL("https://github.com/marud1024/1024");
+				// #endif
+				// #ifdef H5
+					window.open("https://github.com/marud1024/1024");
+				// #endif
+			},
+			async getTotalCollectVideoNum(){
+				// #ifdef APP-PLUS
+				this.openDB()
+				let res = await this.getTotalCollectVideoNumBiz()
+				this.totalNum = res[0].countNum
+				// #endif
+			},
+			async getTotalCollectVideoNumBiz(){
+				// #ifdef APP-PLUS
+				return new Promise(resolve => {
+					plus.sqlite.selectSql({
+						name: 'video',
+						sql: 'select count(*) AS countNum from (select DISTINCT video_key from video)a',
+						success: function(e) {
+							resolve(e);
+						},
+						fail: function(e) {
+							console.log(' getTotalCollectVideoNumBiz查询SQL语句失败: ' + JSON.stringify(e));
+						}
+					});
+				});
+				// #endif
+			},
+			listFiles(){
+				// #ifdef APP-PLUS
+				//  参考地址 https://ask.dcloud.net.cn/article/809
+				var environment = plus.android.importClass("android.os.Environment");
+				var flag = environment.getExternalStorageState() === environment.MEDIA_MOUNTED;
+				var sdRoot = environment.getExternalStorageDirectory();
+				var File = plus.android.importClass("java.io.File");
+				var dirPath = sdRoot + "/" + getApp().globalData.downloadDir;
+				var fd = new File(dirPath);
+				var files = plus.android.invoke(fd,"listFiles");
+				this.localTotalNum = files.length-1;
+				// #endif
+			},
+			navigateToPage(path){
+				uni.navigateTo({
+					url: path
+				});
+			},
+			goLocal() {
+				if (this.localTotalNum ==0) {
+					uni.showModal({
+						title: '提示',
+						content: '还没有下载过视频',
+						success: function (res) {
+						}
+					});
+					return;
+				}
+				uni.navigateTo({
+					url: '/pages/info/local'
+				});
+			},
+			checkUpdate(showModal){
+				// #ifdef APP-PLUS
+				plus.screen.lockOrientation('portrait-primary');
+				let appVersion = plus.runtime.versionCode
+				console.log("appVersion: " + appVersion);
+				uni.request({
+					url: 'https://raw.githubusercontent.com/marud1024/1024/master/version.json', //检查更新的服务器地址
+					data: {},
+					success: (res) => {
+						if (res.statusCode == 200) {
+							if (res.data.version > appVersion) {
+								console.log(showModal == '1');
+								if (showModal == '1') {
+									uni.showModal({
+										title: '更新提示',
+										cancelText:'取消',
+										confirmText:'下载',
+										content: res.data.content,
+										success: (showResult) => {
+											if (showResult.confirm) {
+												plus.runtime.openURL(res.data.url);
+											}
+										}
+									})
+								}else{
+									this.showUpdateTip=true
+								}
+							}else if (res.data.version == appVersion){
+								if (showModal == '1') {
+									uni.showModal({
+										title: '提示',
+										cancelText:'取消',
+										confirmText:'确定',
+										content: '已经是最新版本',
+										success: (showResult) => {
+										}
+									})
+								}
+							}else {
+								if (showModal == '1') {
+									uni.showModal({
+										title: '提示',
+										cancelText:'取消',
+										confirmText:'确定',
+										content: '已经是最新版本!',
+										success: (showResult) => {
+										}
+									})
+								}
+							}
+						}
+					},
+					fail: (err) => {
+						console.log(err);
+						if (showModal == '1') {
+							uni.showModal({
+								title: '更新提示',
+								cancelText:'取消',
+								confirmText:'跳转',
+								content: '检查更新失败,请去github上下载app',
+								success: (showResult) => {
+									if (showResult.confirm) {
+										plus.runtime.openURL('https://github.com/marud1024/1024');
+									}
+								}
+							})
+						}
+						
+					}
+				})
+				// #endif
+			},
+		}
+	}
+</script>
+
+
+<style>
+	.logo {
+		width: 750upx;
+		height: 300upx;
+		background-color: #5677FC;
+		display: flex;
+		flex-direction: row;
+	}
+	
+	.logo-hover {
+		opacity: 0.8;
+	}
+	
+	.logo-img {
+		width: 200upx;
+		height: 200upx;
+		border-radius: 50%;
+	}
+	.logo-img-view{
+		width: 750upx;
+		height: 240upx;
+		border: 0rpx #007AFF solid ;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+	}
+	.logo-title {
+		border: 0rpx #00EB72 solid ;
+		display: flex;
+		height: 240upx;
+		flex-direction: column;
+		justify-content: center;
+		align-items: center;
+	}
+	
+	.user-name {
+		color: #ffffff;
+		font-size: 30rpx;
+		height: 100rpx;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+	}
+	
+	.user-id{
+		height: 100rpx;
+		border-width: 0rpx;
+		border-color: #000000;
+		padding-left: 40upx;
+		font-size: 28upx;
+		color: #ffffff;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+	}
+	.tui-custom{
+		margin-top: 30rpx;
+	}
+</style>

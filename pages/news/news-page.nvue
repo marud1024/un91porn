@@ -1,0 +1,552 @@
+<template>
+	<view class="page-news">
+		<!-- #ifndef MP-QQ -->
+		<uni-list class="listview" :enableBackToTop="true" :scroll-y="true"  @scrolltolower="loadMore()">
+            <uni-refresh class="refresh" @refresh="onrefresh" @pullingdown="onpullingdown" :display="refreshing ? 'show' : 'hide'">
+                <div class="refresh-view">
+                    <image class="refresh-icon" :src="refreshIcon" :style="{width: (refreshing || pulling) ? 0: '32px'}"
+                        :class="{'refresh-icon-active': refreshFlag}"></image>
+                    <uni-load-more v-if="refreshing" class="loading-icon" status="loading" :contentText="loadingMoreText"></uni-load-more>
+                    <text class="loading-text">{{refreshText}}</text>
+                </div>
+            </uni-refresh>
+			<uni-cell v-if="total>0">
+				 <text style="font-size: 32rpx;color: #666666;padding-left: 20rpx;padding-top: 3rpx;padding-bottom: 3rpx;">{{total}}视频</text>
+			</uni-cell>
+			<!-- 模式1 -->
+				<uni-cell v-for="(item, index) in dataList" :key="item.id" v-if="!collectModelValue">
+					<news-item :newsItem="item" @close="closeItem(index)" @click="goDetail(item)"></news-item>
+				</uni-cell>
+				
+				<!-- 模式2 -->
+				<uni-cell  v-if="collectModelValue">
+					<view class="content" v-if="collectModelValue">
+						<view class="video_content" v-for="(item, index) in dataList" :key="index">
+							<icon type="success" size="10" v-if="item.isCollected==1" class="iconflag"/>
+							<text class="mode2-time-text">{{getTime(item.extInfo)}}</text>
+							<image class="image" :src="item.imageUrl" @click="goDetail(item)"></image>
+							<text class="mode2-title">{{item.title}}</text>
+						</view>
+					</view>
+				</uni-cell>
+				 <uni-cell v-if="isLoading">
+						<view class="loading-more">
+							<text class="loading-more-text">{{loadingText}}</text>
+						</view>
+				</uni-cell> 
+			<uni-cell  v-if="enablePageStatus">
+				<view class="page-div">
+					<uni-pagination title=" " @change="changePage" show-icon="true" :pageSize="pageSize" :total="total" :current="current"></uni-pagination>
+				</view>
+			</uni-cell>
+            </uni-list>
+            <!-- #endif -->
+            <no-data class="no-data" v-if="isNoData"></no-data>
+	</view>
+</template>
+
+<script>
+	import {
+		friendlyDate,decrypt,encrypt
+	} from '@/common/util.js';
+
+	import uniPagination from '@/components/uni-pagination/uni-pagination.vue'
+	import uniList from '@/components/uni-list.vue';
+	import uniCell from '@/components/uni-cell.vue';
+	import uniRefresh from '@/components/uni-refresh.vue';
+	import uniLoadMore from '@/components/uni-load-more.vue';
+	import noData from '@/components/nodata.nvue';
+	import newsItem from '@/pages/news/news-item.nvue';
+	import htmlParser from '@/common/html-parser'
+	export default {
+		components: {
+			uniList,
+			uniCell,
+			uniRefresh,
+			uniLoadMore,
+			noData,
+			newsItem,
+			uniPagination
+		},
+		props: {
+			nid: {
+				type: [Number, String],
+				default: ''
+			},
+			collectModelValue:{
+				type: [Boolean],
+				default: true
+			}
+		},
+		data() {
+			return {
+				content:'',
+				htmlString:'',
+				dataList: [],
+				navigateFlag: false,
+				pulling: false,
+				refreshing: false,
+				refreshFlag: false,
+				refreshText: "",
+				isLoading: false,
+				loadingText: '加载中...',
+				isNoData: false,
+				pulling: false,
+				current:1,
+				total:0,
+				pageSize:20,
+				angle: 0,
+				page: 1,
+				enablePageStatus: false,
+				loadingMoreText: {
+					contentdown: '',
+					contentrefresh: '',
+					contentnomore: ''
+				},
+				refreshIcon: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAMAAABg3Am1AAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAB5QTFRFcHBw3Nzct7e39vb2ycnJioqK7e3tpqam29vb////D8oK7wAAAAp0Uk5T////////////ALLMLM8AAABxSURBVHja7JVBDoAgDASrjqj//7CJBi90iyYeOHTPMwmFZrHjYyyFYYUy1bwUZqtJIYVxhf1a6u0R7iUvWsCcrEtwJHp8MwMdvh2amHduiZD3rpWId9+BgPd7Cc2LIkPyqvlQvKxKBJ//Qwq/CacAAwDUv0a0YuKhzgAAAABJRU5ErkJggg=="
+			}
+		},
+		onLoad() {
+			this.getPageStatus()
+		},
+		created() {
+			this.pullTimer = null;
+			this.requestParams = {
+				category: this.nid,
+				sortProperty:'sort',
+				page: this.page,
+				pageSize: 40,
+				userId: ''
+			};
+		},
+		onShow(){
+			this.getPageStatus()
+			this.collectModelValue = getApp().globalData.collectModel
+			console.log("collectModelValue: " + this.collectModelValue);
+		},
+		methods: {
+			getTime(s){
+				return s;
+			},
+			resetPageNum(index){
+				console.log('resetPageNum:'+index)
+			},
+			getPageStatus(){
+				let enablePageInfo = uni.getStorageSync('enablePage');
+				if (enablePageInfo === '1') {
+					this.enablePageStatus = true
+				}
+			},
+			scroll(e,s){
+				console.log("e: " + e);
+				console.log("s: " + s);
+			},
+			getUserId(){
+				let userInfo = uni.getStorageSync('userInfo');
+				let userId = ''
+				if (userInfo!='') {
+					let userInfoJson=JSON.parse(userInfo)
+					userId = userInfoJson.id;
+				}
+				return userId;
+			},
+			changePage(e){
+				console.log('changePage')
+				console.log(e)
+				this.dataList = []
+				this.page = e.current
+				this.current = e.current
+				this.loadData( this.nid,true);
+			},
+			async loadData(index,refresh) {
+				if (this.isLoading) {
+					return;
+				}
+				this.isLoading = true;
+				this.isNoData = false;
+				let url = getApp().globalData.apiUrl+'/index.php';
+				if(index > 0){
+					if (this.page == 1) {
+						url = getApp().globalData.apiUrl + "/v.php?category=" + this.getVideoCategory(index) + "&viewtype=basic";
+					} else {
+						url = getApp().globalData.apiUrl + "/v.php?category=" + this.getVideoCategory(index) + "&viewtype=basic&page=" + this.page;
+					}
+				}else{
+					if (this.page > 1) {
+						this.isLoading = false;
+						return;
+					}	
+				}
+				uni.request({
+					url: url,
+					data: {},
+					header: {
+							'user-agent':'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.100 Safari/537.36', 
+							//'X-Forwarded-For':this.getIp(),
+							'Referer':getApp().globalData.apiUrl+'/index.php',
+							'Accept-Language':'zh-CN,zh;q=0.8,en-US;q=0.6,en;q=0.4'
+					},
+					success: (res) => {
+						let statusCode = res.statusCode
+						console.log('statusCode:'+statusCode)
+						this.parseVideo(res.data)
+						let total = 0
+						if(index > 0){
+							total = this.getTotal(res.data)
+							console.log("total:"+total)
+							this.total= total
+						}
+					},
+					fail: (err) => {
+						uni.showToast({
+							title: '连接超时,请刷新重试',
+							position:'bottom'
+						});
+						console.log(err.errMsg)
+					},
+					complete: (e) => {
+						this.isLoading = false;
+						if (refresh) {
+							this.refreshing = false;
+							this.refreshFlag = false;
+							this.refreshText = "已刷新";
+							if (this.pullTimer) {
+								clearTimeout(this.pullTimer);
+							}
+							this.pullTimer = setTimeout(() => {
+								this.pulling = false;
+							}, 1000);
+						}
+					}
+				})
+			},
+			getVideoCategory(index){
+				if(index=='1'){return 'watch'}
+				if(index=='2'){return 'hot'}
+				if(index=='3'){return 'rp'}
+				if(index=='4'){return 'long'}
+				if(index=='5'){return 'md'}
+				if(index=='6'){return 'tf'}
+				if(index=='7'){return 'mf'}
+				if(index=='8'){return 'rf'}
+				if(index=='9'){return 'top'}
+				if(index=='10'){return 'top&amp;m=-1&amp;'}
+				if(index=='11'){return 'hd'}
+			},
+			getIp(){
+				return Math.floor(Math.random()*255)+'.'+Math.floor(Math.random()*255)+'.'+Math.floor(Math.random()*255)+'.'+Math.floor(Math.random()*255);
+			},
+			getTotal(html){
+				let doc = htmlParser(html.toString().trim());
+				let pagingnav = doc.getElementsByClassName('login_register_header')[0];
+				let str = pagingnav.innerHTML
+				str = this.getSimpleText(str)
+				str = str.substring(str.indexOf('的'),str.length)
+				str = str.replace(/[^0-9]/ig,"")
+				console.log(str)
+				return str
+			},
+			async parseVideo(html){
+				let videoArray = new Array();
+				let videoKeyArray = new Array();
+				let doc = htmlParser(html.toString().trim());
+				let videoListHtml = doc.getElementsByClassName('col-xs-12');
+				console.log(videoListHtml.length);
+				for(var i=0;i<videoListHtml.length;i++){
+					let htmlstr =  videoListHtml[i].innerHTML
+					let videoHtml = htmlParser(htmlstr);
+					let linkHtml = videoHtml.getElementsByTagName('a')[0];
+					let imgHtml = videoHtml.getElementsByTagName('img')[0];
+					let durationHtml = videoHtml.getElementsByClassName('duration')[0];
+					let titleHtml = videoHtml.getElementsByClassName('video-title')[0];
+					let infoHtml = htmlstr.substring(htmlstr.indexOf('添加时间'),htmlstr.indexOf('积分'))
+					linkHtml = linkHtml.tagContent
+					imgHtml = imgHtml.tagContent
+					let link = linkHtml.replace('<a href="','').replace('">','')
+					let imageUrl = imgHtml.substring(imgHtml.indexOf('http'),imgHtml.lastIndexOf('"'))
+					let duration = durationHtml.innerHTML;
+					let title = titleHtml.innerHTML;
+					let extInfo = this.getSimpleText(infoHtml);
+					let video = new Object();
+					video.link = link;;
+					video.imageUrl = imageUrl;
+					video.duration = duration;
+					video.title = title;
+					video.extInfo = "时长:"+duration+extInfo;
+					video.isCollected = 0
+					let videoKey = link.substring(link.indexOf("=") + 1, link.indexOf("&") != -1 ? link.indexOf("&") : link.length);
+					video.videoKey = videoKey
+					videoArray.push(video)
+					videoKeyArray.push(videoKey)
+				}
+				await this.videosCollecteStatus(videoArray,videoKeyArray)
+				
+				console.log('videos:'+videoArray.length)
+				let totalNum = this.dataList.length;
+				if(totalNum==0){
+					this.dataList = videoArray
+				}else{
+					this.dataList = this.dataList.concat(videoArray)
+				}
+			},
+			async videosCollecteStatus(videoArray,videoKeyArray){
+				let videoKeys = await this.getCollectedVideo(videoKeyArray)
+				if (videoKeys == '') {
+					return;
+				}
+				console.log(videoKeys.length)
+				for (var i = 0; i < videoArray.length; i++) {
+					let video =  videoArray[i]
+					for (var k = 0; k < videoKeys.length; k++) {
+						if (video.videoKey == videoKeys[k].video_key) {
+							video.isCollected = 1
+						}
+					}
+				}
+				
+			},
+			async getCollectedVideo(videoKeyArray){
+				let videoKeyStr = ''
+				for (var i = 0; i < videoKeyArray.length; i++) {
+					videoKeyStr = videoKeyStr+"'"+videoKeyArray[i]+"',";
+				}
+				videoKeyStr = videoKeyStr.substring(0,videoKeyStr.lastIndexOf(','))
+				let sql = "select video_key from video where video_key IN ("+videoKeyStr+")"
+				return new Promise(resolve => {
+					plus.sqlite.selectSql({
+						name: 'video',
+						sql: sql,
+						success: function(e) {
+							resolve(e);
+						},
+						fail: function(e) {
+							resolve("");
+							console.log('getCollectedVideo查询SQL语句失败: ' + JSON.stringify(e));
+						}
+					});
+				});
+			},
+			getSimpleText(html){
+				let re1 = new RegExp("<.+?>","g");//匹配html标签的正则表达式，"g"是搜索匹配多个符合的内容
+				let msg = html.replace(re1,'');//执行替换成空字符
+				msg = msg.replace(new RegExp(/&nbsp;/g),' ').replace(/[\r\n]/g," ").replace(/\ +/g," ")
+				return msg;
+			},
+			loadMore() {
+				console.log("loadMore" );
+				this.page = this.page+1
+				this.current=this.page
+				this.loadData( this.nid,true);
+			},
+			clear() {
+				this.dataList.length = 0;
+				this.requestParams.minId = 0;
+			},
+			goDetail(detail) {
+				if (this.navigateFlag) {
+					return;
+				}
+				this.navigateFlag = true;
+				uni.navigateTo({
+					url: '/pages/detail/detail?query=' + encodeURIComponent(JSON.stringify(detail))
+				});
+				setTimeout(() => {
+					this.navigateFlag = false;
+				}, 200)
+			},
+			closeItem(index) {
+				uni.showModal({
+					content: '不感兴趣？',
+					success: (res) => {
+						if (res.confirm) {
+							this.dataList.splice(index, 1);
+						}
+					}
+				})
+			},
+			refreshData() {
+				if (this.isLoading) {
+					return;
+				}
+				this.page = 1
+				this.dataList = [];
+				this.pulling = true;
+				this.refreshing = true;
+				this.refreshText = "正在刷新...";
+				this.loadData(this.nid,true);
+			},
+			onrefresh(e) {
+				this.refreshData();
+			},
+			onpullingdown(e) {
+				if (this.refreshing) {
+					return;
+				}
+
+				// var angle = (e.pullingDistance) / e.viewHeight * 180;
+				// if (angle > 180) {
+				// 	angle = 180;
+				// }
+				// tab.angle = angle;
+				this.page = 1
+				this.current=this.page
+				this.pulling = false;
+				if (Math.abs(e.pullingDistance) > Math.abs(e.viewHeight)) {
+					this.refreshFlag = true;
+					this.refreshText = "释放立即刷新";
+				} else {
+					this.refreshFlag = false;
+					this.refreshText = "下拉可以刷新";
+				}
+			},
+			newGuid() {
+				let s4 = function() {
+					return (65536 * (1 + Math.random()) | 0).toString(16).substring(1);
+				}
+				return (s4() + s4() + "-" + s4() + "-4" + s4().substr(0, 3) + "-" + s4() + "-" + s4() + s4() + s4()).toUpperCase();
+			}
+		}
+	}
+</script>
+
+<style scoped>
+	.mode2-title{
+		font-size: 28rpx;
+	}
+	.mode2-time{
+		position: absolute;
+		bottom: 50;
+		right: 10;
+	}
+	.mode2-time-text{
+		color: #ffffff;
+		font-size: 28rpx;
+		position: absolute;
+		bottom: 10;
+		right: 10;
+		z-index: 70;
+	}
+	.iconflag{
+		position: absolute;
+		top: 0;
+		right: 0;
+		z-index: 30;
+	}
+	.page-div{
+		position:fixed;
+		width: 750rpx;
+		z-index:10;
+		bottom: 0;
+		background-color: #f0f0f0;
+		display: flex;
+	}
+	.no-data {
+		flex: 1;
+		position: absolute;
+		left: 0;
+		top: 0;
+		right: 0;
+		bottom: 0;
+		z-index: 10;
+	}
+
+	.page-news {
+		flex: 1;
+		flex-direction: column;
+		position: absolute;
+		left: 0;
+		top: 0;
+		right: 0;
+		bottom: 0;
+	}
+
+	.listview {
+		position: absolute;
+		left: 0;
+		top: 0;
+		right: 0;
+		bottom: 0;
+		/* #ifndef APP-NVUE */
+		display: flex;
+		flex-direction: column;
+		/* #endif */
+		/* #ifndef MP-ALIPAY */
+		flex-direction: column;
+		/* #endif */
+	}
+
+	.refresh {
+		justify-content: center;
+	}
+
+	.refresh-view {
+		/* #ifndef APP-NVUE */
+		display: flex;
+		/* #endif */
+		width: 750rpx;
+		height: 64px;
+		flex-direction: row;
+		flex-wrap: nowrap;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.refresh-icon {
+		width: 32px;
+		height: 32px;
+		transition-duration: .5s;
+		transition-property: transform;
+		transform: rotate(0deg);
+		transform-origin: 15px 15px;
+	}
+
+	.refresh-icon-active {
+		transform: rotate(180deg);
+	}
+
+	.loading-icon {
+		width: 28px;
+		height: 28px;
+		margin-right: 5px;
+		color: gray;
+	}
+
+	.loading-text {
+		margin-left: 2px;
+		font-size: 16px;
+		color: #999999;
+	}
+
+	.loading-more {
+		align-items: center;
+		justify-content: center;
+		padding-top: 14px;
+		padding-bottom: 14px;
+		text-align: center;
+	}
+
+	.loading-more-text {
+		font-size: 28upx;
+		color: #999;
+	}
+	
+	
+	.image{
+		height: 340upx;
+	}
+	.content{
+		display: flex;
+		flex-direction: row;
+		width: 750upx;
+		flex-wrap: wrap;
+	}
+	.video_content{
+		padding: 5 5 1 5;
+		width: 370upx;
+		height: 420rpx;
+		overflow:hidden;
+	}
+	.title{
+		font-size: 8upx;
+	}
+</style>

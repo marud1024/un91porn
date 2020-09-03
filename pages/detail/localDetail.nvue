@@ -1,0 +1,334 @@
+<template>
+	<view>
+		<view style="width: 750rpx;height: 700upx;;position: fixed;">
+			<video id="myVideo" :src="video.sourceUrl" ref="video" :poster="video.imageUrl"
+			style="width: 750rpx;height: 700upx;" page-gesture="true" loop="true" auto-play="true"></video>
+		</view>
+		<text style="padding-top: 710upx;font-size: 33rpx;">
+			{{video.title}}
+		</text>
+		<view style="flex-direction: row;height: 80upx;" v-if="showScreenShotArea">
+			<button class="mini-btn" style="width: 130upx;padding-right: 10upx;"
+				 size="mini" @click="reScreenShot">重新截图</button>
+			<uni-number-box :min="1" :max="1000" :value="numberBoxValue" @change="numberBoxChange"></uni-number-box>
+		</view>
+		<uni-popup ref="showimage" :mask-click="true">
+			<view class="uni-image">
+				<image class="image2" :src="localVideoImagePath" mode="scaleToFill" @click="cancel('image')"/>
+			</view>
+		</uni-popup>
+		<text style="padding-top: 15upx;"></text>
+		<!-- 模式1 -->
+		<view class="page-news" style="" v-if="!localModelValue">
+			<uni-list class="listview">
+				<uni-cell v-for="(item, index) in videoList" :key="index">
+					<news-item :newsItem="item"  @click="playVideo(item)"></news-item>
+				</uni-cell>
+			</uni-list>
+		</view>
+		
+		<!-- 模式2 -->
+		<view class="content" v-if="localModelValue">
+			<scroll-view style="width: 750rpx;display: flex;flex-direction: row;flex-wrap: wrap;" scroll-y="true" class="scroll-Y" @scrolltoupper="upper" @scrolltolower="lower"
+			                @scroll="scroll">
+				<view class="video_content" v-for="(item, index) in videoList" :key="index">
+					<image class="image" :src="item.imageUrl" @click="playVideo(item)"></image>
+				</view>
+			</scroll-view>
+		</view>
+	</view>
+</template>
+
+<script>
+	import uniNumberBox from "@/components/uni-number-box/uni-number-box.vue"
+	import uniList from '@/components/uni-list.vue';
+	import uniCell from '@/components/uni-cell.vue';
+	import newsItem from '../news/news-item.nvue';
+	import uniPopup from '@/components/uni-popup/uni-popup.vue'
+	export default {
+		components: {
+			uniList,
+			uniCell,
+			uniNumberBox,
+			uniPopup,
+			newsItem
+		},
+		data() {
+			return {
+				video: {},
+				numberBoxValue:5,
+				showScreenShotArea:false,
+				videoList:[],
+				localModelValue:true,
+				localVideoImagePath:""
+			}
+		},
+		onNavigationBarButtonTap(e) {
+			uni.showModal({
+				title: '提示',
+				cancelText:'取消',
+				confirmText:'确定',
+				content: "删除视频？",
+				success: (showResult) => {
+					if (showResult.confirm) {
+						this.removeVideo(this.video.sourceUrl)
+					}
+				}
+			})
+		},
+		onShow(){
+			this.localModelValue = getApp().globalData.localModel
+		},
+		onLoad(event) {
+			try {
+				let video = JSON.parse(decodeURIComponent(event.query));
+				this.video =video
+			} catch (error) {
+				this.video = JSON.parse(event.query);
+			}
+			uni.setNavigationBarTitle({
+				title: this.video.title
+			});
+		
+		},
+		onReady() {
+			this.videoContext = uni.createVideoContext('myVideo',this)
+			setTimeout(() => {
+			    this.videoContext.play()
+			}, 100)
+			// #ifdef APP-PLUS
+			 let slipRightModelValue = uni.getStorageSync('slipRightModelValue');
+			 if (slipRightModelValue=='1') {
+			 	let ws = plus.webview.currentWebview();
+			 	//监听当前侧滑窗口的右滑
+			 	ws.drag({  
+			 		direction: 'right',  
+			 		moveMode: 'followFinger'  
+			 	}, {  
+			 		view: plus.runtime.appid,  
+			 		moveMode: 'silent'  
+			 	}, function(e) {  
+			 		if(e.type == 'end' && e.result) {  
+			 			uni.navigateBack()
+			 		}  
+			 	});
+			 }
+			// #endif
+		},
+		onUnload() {
+			console.log('onUnload');
+		},
+		onHide() {
+			console.log('onHide');
+			this.videoContext.pause();
+		},
+		methods: {
+			removeVideo(path){
+				var File = plus.android.importClass("java.io.File");
+				var file = new File(path);
+				var res = plus.android.invoke(file,"delete");
+				if(res){
+					uni.showToast({
+						title: '删除成功'
+					});
+				}else{
+					uni.showToast({
+						title: '删除失败'
+					});
+				}
+			},
+			numberBoxChange(value) {
+				this.numberBoxValue = value
+			},
+			playVideo(item){
+				this.video = item
+				uni.setNavigationBarTitle({
+					title: this.video.title
+				});
+				setTimeout(() => {
+				    this.videoContext.play()
+				}, 100)
+				this.getLocalVideoImage()
+			},
+			reScreenShot(){
+				try {
+					var environment = plus.android.importClass("android.os.Environment");
+					var flag = environment.getExternalStorageState() === environment.MEDIA_MOUNTED;
+					var sdRoot = environment.getExternalStorageDirectory();
+					var File = plus.android.importClass("java.io.File");
+					//获取本地视频封面图片
+					var imageUrl = sdRoot + "/" + getApp().globalData.downloadDir
+									+ "/" + getApp().globalData.imageDir + "/" + this.video.title +".jpg";
+					var imageFile = new File(imageUrl);
+					if (imageFile != null && imageFile.exists()){
+						imageFile.delete();
+						console.log("delete old image");
+					}
+					var tmpOldFile = sdRoot + "/VideoCropImage/image_videoimage.jpg"
+					var imageTmpOldFile = new File(tmpOldFile);
+					if (imageTmpOldFile != null && imageTmpOldFile.exists()){
+						imageTmpOldFile.delete();
+						console.log("delete imageTmpOldFile image");
+					}
+					const plug=uni.requireNativePlugin("Html5app-VideoCover");
+					console.log("this.numberBoxValue: " + this.numberBoxValue);
+					var time = this.numberBoxValue;
+					var imageFile2 = new File(imageUrl);
+					plug.setVideoPath({"url":this.video.sourceUrl,"time":time},ret=>{
+						var imageTmpUrl = ret.image;
+						imageTmpUrl = imageTmpUrl.replace('file:///storage/emulated/0/','')
+						imageTmpUrl = sdRoot + "/VideoCropImage/image_videoimage.jpg"
+						console.log("imageTmpUrl: " + imageTmpUrl);
+						var tmpFile = new File(imageTmpUrl);
+						tmpFile.renameTo(imageFile2)
+					});
+					uni.showToast({
+						title: '截图成功',
+						position:'bottom'
+					});
+					//打开图片预览一下 imageUrl
+					this.localVideoImagePath = imageUrl
+					this.$refs.showimage.open()
+					this.showScreenShotArea = false;
+				} catch (error) {
+					uni.showToast({
+						title: '功能开发中',
+						position:'bottom'
+					});
+				}
+			},
+			getLocalVideoImage(){
+				var environment = plus.android.importClass("android.os.Environment");
+				var flag = environment.getExternalStorageState() === environment.MEDIA_MOUNTED;
+				var sdRoot = environment.getExternalStorageDirectory();
+				var File = plus.android.importClass("java.io.File");
+				//获取本地视频封面图片
+				var imageUrl = sdRoot + "/" + getApp().globalData.downloadDir
+								+ "/" + getApp().globalData.imageDir + "/" + this.video.title +".jpg";
+				 var imageFile = new File(imageUrl);
+				if(!imageFile.exists()){
+					 const plug=uni.requireNativePlugin("Html5app-VideoCover");
+					 plug.setVideoPath({"url":this.video.sourceUrl},ret=>{
+						var imageTmpUrl = ret.image;
+						imageTmpUrl = imageTmpUrl.replace('file:///storage/emulated/0/','')
+						imageTmpUrl = sdRoot + "/VideoCropImage/image_videoimage.jpg"
+						console.log("imageTmpUrl: " + imageTmpUrl);
+						var tmpFile = new File(imageTmpUrl);
+						tmpFile.renameTo(imageFile)
+					 });
+				}
+			},
+			listFiles(){
+				//  参考地址 https://ask.dcloud.net.cn/article/809
+				var environment = plus.android.importClass("android.os.Environment");
+				var flag = environment.getExternalStorageState() === environment.MEDIA_MOUNTED;
+				var sdRoot = environment.getExternalStorageDirectory();
+				
+				var File = plus.android.importClass("java.io.File");
+				var dirPath = sdRoot + "/" + getApp().globalData.downloadDir;
+				var fd = new File(dirPath);
+				var files = plus.android.invoke(fd,"listFiles");
+				console.log(files.length);
+				var fileArray = new Array(files.length);
+				for(var i=0; i<files.length; i++){
+				    var file = files[i];
+					if(plus.android.invoke(file,"isDirectory")){  
+						// 文件夹  
+					}else{  
+						// 文件  
+						var videoSize = plus.android.invoke(file,"length");
+						var title = plus.android.invoke(file,"getName");
+						var sourceUrl = plus.android.invoke(file,"getPath");
+						var lastModified = plus.android.invoke(file,"lastModified");
+						 //获取本地视频封面图片
+						var imageUrl = sdRoot + "/" + getApp().globalData.downloadDir
+										+ "/" + getApp().globalData.imageDir + "/" + title +".jpg";
+						var video = new Object();
+						video.imageUrl = imageUrl;
+						video.title = title.replace(".mp4","");
+						video.sourceUrl = sourceUrl;
+						video.lastModified = lastModified;
+						video.videoSize = this.getFileSize(videoSize);
+						fileArray[i] = video
+					}  
+				}
+				fileArray.sort(this.compareTime('lastModified'))
+				this.videoList = fileArray;
+				console.log("videoList: " + this.videoList.length);
+			},
+			compareTime(prop) {
+			    return function (obj1, obj2) {
+			        var val1 = obj1[prop];
+			        var val2 = obj2[prop];
+			        if (!isNaN(Number(val1)) && !isNaN(Number(val2))) {
+			            val1 = Number(val1);
+			            val2 = Number(val2);
+			        }
+			        if (val1 < val2) {
+			            return 1;
+			        } else if (val1 > val2) {
+			            return -1;
+			        } else {
+			            return 0;
+			        }            
+			    } 
+			},
+			getFileSize(size){
+				// 单位转换
+				var fileSizeString;
+				if(size == 0){
+				    fileSizeString = "0B";
+				}else if(size < 1024){
+				    fileSizeString = size + "B";
+				}else if(size < 1048576){
+				    fileSizeString = (size/1024).toFixed(1) + "KB";
+				}else if (size < 1073741824){
+				    fileSizeString = (size/1048576).toFixed(1) + "MB";
+				}else{
+				    fileSizeString = (size/1073741824).toFixed(2) + "GB";
+				}
+				return fileSizeString;
+			}
+		},
+		mounted() {
+			this.listFiles()
+		}
+	}
+</script>
+
+<style>
+.list{
+		padding: 5 10 5 10;
+		font-size: 12upx;
+		color: #999999;
+		border-width: 1rpx;
+		border-color: #F0F0F0;
+	}
+	
+	.image{
+		height: 260upx;
+	}
+	.uni-image {
+		width: 400upx;
+		height: 400upx;
+		position: relative;
+	}
+	.image2{
+		width: 400upx;
+		height: 400upx;
+	}
+	
+	.content{
+		display: flex;
+		flex-direction: row;
+		width: 750upx;
+		flex-wrap: wrap;
+	}
+	.video_content{
+		padding: 3 3 0 3;
+		width: 248upx;
+	}
+	.title{
+		font-size: 8upx;
+	}
+</style>

@@ -1,0 +1,42 @@
+<template>
+	<list>
+	    <cell v-for="(task, index) in downloadTask" :key="index">
+	      <text>{{index+1}}.{{task.filename}}({{getFileSize(task.totalSize)}})</text>
+	    </cell>
+	  </list>
+</template>
+
+<script>
+	import {
+		getFileSize
+	} from '@/common/util.js';
+	export default {
+		data() {
+			return {
+				downloadTask:[]
+			}
+		},
+		methods: {
+			enumerateDwonload(){
+				var taskArray = new Array();
+				plus.downloader.enumerate(function(tasks){
+					for (var i = tasks.length-1; i >=0; i--) {
+						var filename = tasks[i].filename;
+						var url = tasks[i].url;
+						var state = tasks[i].state;
+						var downloadedSize = tasks[i].downloadedSize;
+						var totalSize = tasks[i].totalSize;
+						taskArray.push(tasks[i])
+					}
+				},-1);
+				console.log(taskArray.length);
+			}
+		},mounted() {
+			this.enumerateDwonload()
+		}
+	}
+</script>
+
+<style>
+
+</style>

@@ -1,0 +1,186 @@
+<template>
+	<view>
+		<text class="total">共{{videoList.length}}个</text>
+		<!-- 模式1 -->
+		  <view class="page-news" v-if="!localModelValue">
+			<uni-list class="listview">
+				<uni-cell v-for="(item, index) in videoList" :key="index">
+					<news-item :newsItem="item"  @click="goDetail(item)"></news-item>
+				</uni-cell>
+			</uni-list>
+		  </view>
+		  <!-- 模式2 -->
+		  <view class="content" v-if="localModelValue">
+		  	<view class="video_content" v-for="(item, index) in videoList" :key="index">
+		  		<image class="image" :src="item.imageUrl" @click="goDetail(item)"></image>
+		  	</view>
+		  </view>
+	</view>	
+</template>
+
+<script>
+	import uniList from '@/components/uni-list.vue';
+	import uniCell from '@/components/uni-cell.vue';
+	import newsItem from '../news/news-item.nvue';
+	export default {
+		components: {
+			uniList,
+			uniCell,
+			newsItem
+		},
+		onShow(){
+			this.localModelValue = getApp().globalData.localModel
+		},
+		onHide() {
+			uni.hideLoading();
+		},
+		data() {
+			return {
+				sourceUrl:"",
+				imageUrl:"",
+				sdRoot:"",
+				localModelValue:true,
+				videoList:[]
+			}
+		},
+		methods: {
+			goDetail(item){
+				uni.navigateTo({
+					url: '/pages/detail/localDetail?query=' + encodeURIComponent(JSON.stringify(item))
+				});
+			},
+			listFiles(){
+				uni.showLoading({title:"loading"})
+				//  参考地址 https://ask.dcloud.net.cn/article/809
+				var environment = plus.android.importClass("android.os.Environment");
+				var flag = environment.getExternalStorageState() === environment.MEDIA_MOUNTED;
+				var sdRoot = environment.getExternalStorageDirectory();
+				
+				var File = plus.android.importClass("java.io.File");
+				var dirPath = sdRoot + "/" + getApp().globalData.downloadDir;
+				var fd = new File(dirPath);
+				var files = plus.android.invoke(fd,"listFiles");
+				var fileArray = new Array(files.length);
+				for(var i=0; i<files.length; i++){
+				    var file = files[i];
+					if(plus.android.invoke(file,"isDirectory")){  
+						// 文件夹  
+					}else{  
+						// 文件  
+						var videoSize = plus.android.invoke(file,"length");
+						var title = plus.android.invoke(file,"getName");
+						var sourceUrl = plus.android.invoke(file,"getPath");
+						var lastModified = plus.android.invoke(file,"lastModified");
+						 //获取本地视频封面图片
+						 var imageUrl = sdRoot + "/" + getApp().globalData.downloadDir
+										+ "/" + getApp().globalData.imageDir + "/" + title +".jpg";
+						var video = new Object();
+						video.imageUrl = imageUrl;
+						video.title = title.replace(".mp4","");
+						video.sourceUrl = sourceUrl;
+						video.lastModified = lastModified;
+						video.videoSize = this.getFileSize(videoSize);
+						fileArray[i] = video
+					}  
+				}
+				fileArray.sort(this.compareTime('lastModified'))
+				uni.hideLoading();
+				this.videoList = fileArray;
+				console.log("videoList: " + this.videoList.length);
+				
+			},
+			compareTime(prop) {
+			    return function (obj1, obj2) {
+			        var val1 = obj1[prop];
+			        var val2 = obj2[prop];
+			        if (!isNaN(Number(val1)) && !isNaN(Number(val2))) {
+			            val1 = Number(val1);
+			            val2 = Number(val2);
+			        }
+			        if (val1 < val2) {
+			            return 1;
+			        } else if (val1 > val2) {
+			            return -1;
+			        } else {
+			            return 0;
+			        }            
+			    } 
+			},
+			creatFolder(){
+				var environment = plus.android.importClass("android.os.Environment");
+				var flag = environment.getExternalStorageState() === environment.MEDIA_MOUNTED;
+				var sdRoot = environment.getExternalStorageDirectory();
+				var File = plus.android.importClass("java.io.File");
+				var dirPath = sdRoot + "/" + getApp().globalData.downloadDir + "/" + getApp().globalData.imageDir;
+				var downloadDir = new File(dirPath);
+				if(!downloadDir.exists()){
+					var res = downloadDir.mkdirs();
+					console.log("downloadDir mkdirs:"+res);
+				}else{
+					console.log("downloadDir is exists");
+				}
+			},
+			deleteFile(path){
+				var File = plus.android.importClass("java.io.File");
+				var fd = new File(path);
+				if (fd != null && fd.exists()){
+					fd.delete();
+					plus.nativeUI.toast("删除成功");
+				}
+			},
+			getFileSize(size){
+				// 单位转换
+				var fileSizeString;
+				if(size == 0){
+				    fileSizeString = "0B";
+				}else if(size < 1024){
+				    fileSizeString = size + "B";
+				}else if(size < 1048576){
+				    fileSizeString = (size/1024).toFixed(1) + "KB";
+				}else if (size < 1073741824){
+				    fileSizeString = (size/1048576).toFixed(1) + "MB";
+				}else{
+				    fileSizeString = (size/1073741824).toFixed(1) + "GB";
+				}
+				return fileSizeString;
+			}
+		},
+		mounted() {
+			this.listFiles()
+		}
+	}
+</script>
+
+<style>
+	.total{
+		padding: 20 20 10 15;
+		text-align: left;
+		font-size: 32upx;
+		color: #555555;
+	}
+	.list{
+		padding: 10 10 10 15;
+		font-size: 12upx;
+		color: #999999;
+		border-width: 1rpx;
+		border-color: #F0F0F0;
+	}
+	
+	
+	.image{
+		height: 260upx;
+	}
+	.content{
+		display: flex;
+		flex-direction: row;
+		width: 750upx;
+		flex-wrap: wrap;
+	}
+	.video_content{
+		padding: 3 3 3 3;
+		width: 248upx;
+	}
+	.title{
+		font-size: 8upx;
+	}
+</style>

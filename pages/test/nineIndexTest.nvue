@@ -1,0 +1,412 @@
+<template>
+	<view class="page-news">
+			<uni-pagination title="" show-icon="true" pageSize="20" total="1000" current="30"></uni-pagination>
+		</view>
+	</view>
+</template>
+
+<script>
+	import {
+		friendlyDate,decrypt,encrypt
+	} from '@/common/util.js';
+
+	import uniSearchBar from '@/components/uni-search-bar/uni-search-bar.vue'
+	import uniPagination from '@/components/uni-pagination/uni-pagination.vue'
+	import uniList from '@/components/uni-list.vue';
+	import uniCell from '@/components/uni-cell.vue';
+	import uniRefresh from '@/components/uni-refresh.vue';
+	import uniLoadMore from '@/components/uni-load-more.vue';
+	import noData from '@/components/nodata.nvue';
+	import newsItem from '@/pages/news/news-item.nvue';
+
+	export default {
+		components: {
+			uniList,
+			uniCell,
+			uniRefresh,
+			uniLoadMore,
+			noData,
+			newsItem,
+			uniPagination
+		},
+		data() {
+			return {
+				searchVal:'',
+				collectModelValue:true,
+				dataList: [],
+				navigateFlag: false,
+				pulling: false,
+				refreshing: false,
+				refreshFlag: false,
+				refreshText: "",
+				isLoading: false,
+				loadingText: '加载中...',
+				isNoData: false,
+				pulling: false,
+				current:1,
+				total:20,
+				pageSize:20,
+				angle: 0,
+				page: 1,
+				array: [{name:'评分',sortValue:'sort'},{name: '日期',sortValue:'createDate'},
+					{name:'观看数',sortValue:'viewNum'}, {name:'收藏数',sortValue:'collecteNum'}, {name:'评论数',sortValue:'commentNum'}],
+				index: 0,
+				loadingMoreText: {
+					contentdown: '',
+					contentrefresh: '',
+					contentnomore: ''
+				},
+				iStatusBarHeight:0,
+				refreshIcon: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAMAAABg3Am1AAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAB5QTFRFcHBw3Nzct7e39vb2ycnJioqK7e3tpqam29vb////D8oK7wAAAAp0Uk5T////////////ALLMLM8AAABxSURBVHja7JVBDoAgDASrjqj//7CJBi90iyYeOHTPMwmFZrHjYyyFYYUy1bwUZqtJIYVxhf1a6u0R7iUvWsCcrEtwJHp8MwMdvh2amHduiZD3rpWId9+BgPd7Cc2LIkPyqvlQvKxKBJ//Qwq/CacAAwDUv0a0YuKhzgAAAABJRU5ErkJggg=="
+			}
+		},
+		created() {
+			this.pullTimer = null;
+			this.requestParams = {
+				title:'',
+				category: 12,
+				sortProperty:'sort',
+				page: this.page,
+				pageSize: 100
+			};
+		},
+		onShow(){
+			this.collectModelValue = getApp().globalData.myCollectModel
+		},
+		onLoad() {
+			this.iStatusBarHeight = uni.getSystemInfoSync().statusBarHeight
+		},
+		onBackPress() {
+			// #ifdef APP-PLUS
+			plus.key.hideSoftKeybord();
+			// #endif
+		},
+		methods: {
+			search(res) {
+				this.requestParams.title=res.value;
+				this.page=1;
+				this.loadData(12,true);
+			},
+			inputSearchWord(res) {
+				this.searchVal = res.value
+			},
+			cancelSearch(res) {
+				this.searchVal='';
+				this.requestParams.title='';
+				this.page=1;
+				this.loadData(12,true);
+			},
+			bindPickerChange(e) {
+				console.log(e);
+				this.index = e.detail.value
+				this.page=1;
+				this.loadData(12,true);
+			},
+			scroll(e,s){
+				console.log("e: " + e);
+				console.log("s: " + s);
+			},
+			changePage(e){
+				console.log(e)
+				this.page = e.current
+				this.current = e.current
+				
+				this.loadData(12,true);
+			},
+			getUserId(){
+				let userInfo = uni.getStorageSync('userInfo');
+				console.log(userInfo);
+				let userId = ''
+				if (userInfo!='') {
+					let userInfoJson=JSON.parse(userInfo)
+					userId = userInfoJson.id;
+				}
+				console.log("userId: " + userId);
+				return userId;
+			},
+			loadData(index,refresh) {
+				this.dataList =[];
+				if (this.getUserId()==='') {
+					uni.showModal({
+					    title: '提示',
+					    content: '登录后可以查看个人收藏',
+						cancelText:'取消',
+						confirmText:'登录',
+					    success: function (res) {
+					        if (res.confirm) {
+					            uni.navigateTo({
+					            	url:'/pages/info/login'
+					            })
+					        }
+					    }
+					});
+					uni.hideLoading();
+					this.isLoading = false;
+					if (refresh) {
+						this.refreshing = false;
+						this.refreshFlag = false;
+						this.refreshText = "";
+						if (this.pullTimer) {
+							clearTimeout(this.pullTimer);
+						}
+						this.pullTimer = setTimeout(() => {
+							this.pulling = false;
+						}, 1000);
+					}
+				}else{
+					if (this.isLoading) {
+						return;
+					}
+					console.log('loading');
+					this.isLoading = true;
+					this.isNoData = false;
+					this.requestParams.time = new Date().getTime() + '';
+					var startTime = new Date();
+					this.requestParams.page = (this.page===0?1:this.page)
+					console.log("this.requestParams.page: " + this.requestParams.page);
+					this.requestParams.pageSize = 102
+					this.requestParams.userId = this.getUserId();
+					this.requestParams.sortProperty = this.array[this.index].sortValue
+					this.pageSize = 102;
+					var url = getApp().globalData.apiUrl+'/video/manager/queryMyCollect'
+					uni.request({
+						url: url, 
+						data: this.requestParams,
+						header: {
+						   'content-type': 'application/json'
+						},
+						success: (result) => {
+							this.total=result.data.total
+							let dncryptstr = result.data.videoLinks;
+							let videoLinks = decrypt(dncryptstr)
+							var endTime = new Date();
+							console.log("request time " + new Date(endTime - startTime).getTime());
+							const data = result.data;
+							this.isNoData = (eval(videoLinks).length <= 0);
+							this.dataList = eval(videoLinks);
+							this.requestParams.minId = 0;
+						},
+						fail: (err) => {
+							console.log(err);
+							uni.showToast({
+								title:'获取收藏列表失败，请刷新'
+							})
+							uni.hideLoading()
+							if (this.dataList.length == 0) {
+								this.isNoData = true;
+							}
+						},
+						complete: (e) => {
+							this.isLoading = false;
+							if (refresh) {
+								this.refreshing = false;
+								this.refreshFlag = false;
+								this.refreshText = "已刷新";
+								if (this.pullTimer) {
+									clearTimeout(this.pullTimer);
+								}
+								this.pullTimer = setTimeout(() => {
+									this.pulling = false;
+								}, 1000);
+							}
+						}
+					});
+				}	
+				
+				
+			},
+			loadMore(e) {
+				this.page = this.page+1
+				this.current=this.page+1
+				this.loadData( this.nid,true);
+			},
+			clear() {
+				this.dataList.length = 0;
+				this.requestParams.minId = 0;
+			},
+			goDetail(detail) {
+				if (this.navigateFlag) {
+					return;
+				}
+				this.navigateFlag = true;
+				uni.navigateTo({
+					url: '/pages/detail/detail?query=' + encodeURIComponent(JSON.stringify(detail))
+				});
+				setTimeout(() => {
+					this.navigateFlag = false;
+				}, 200)
+			},
+			closeItem(index) {
+				uni.showModal({
+					content: '不感兴趣？',
+					success: (res) => {
+						if (res.confirm) {
+							this.dataList.splice(index, 1);
+						}
+					}
+				})
+			},
+			refreshData() {
+				if (this.isLoading) {
+					return;
+				}
+				this.dataList = [];
+				this.pulling = true;
+				this.refreshing = true;
+				this.refreshText = "正在刷新...";
+				this.loadData(this.nid,true);
+			},
+			onrefresh(e) {
+				this.refreshData();
+			},
+			onpullingdown(e) {
+				if (this.refreshing) {
+					return;
+				}
+
+				// var angle = (e.pullingDistance) / e.viewHeight * 180;
+				// if (angle > 180) {
+				// 	angle = 180;
+				// }
+				// tab.angle = angle;
+				this.page = 0
+				this.current=this.page+1
+				this.pulling = false;
+				if (Math.abs(e.pullingDistance) > Math.abs(e.viewHeight)) {
+					this.refreshFlag = true;
+					this.refreshText = "释放立即刷新";
+				} else {
+					this.refreshFlag = false;
+					this.refreshText = "下拉可以刷新";
+				}
+			},
+			newGuid() {
+				let s4 = function() {
+					return (65536 * (1 + Math.random()) | 0).toString(16).substring(1);
+				}
+				return (s4() + s4() + "-" + s4() + "-4" + s4().substr(0, 3) + "-" + s4() + "-" + s4() + s4() + s4()).toUpperCase();
+			}
+		},
+		mounted() {
+			uni.setNavigationBarTitle({
+				title: "我的收藏"
+			});
+		}
+	}
+</script>
+
+<style scoped>
+	.page-div{
+		position:fixed;
+		width: 750rpx;
+		z-index:10;
+		bottom: 0;
+		background-color: #f0f0f0;
+	}
+	.no-data {
+		flex: 1;
+		position: absolute;
+		left: 0;
+		top: 0;
+		right: 0;
+		bottom: 0;
+		z-index: 10;
+	}
+
+	.page-news {
+		flex: 1;
+		flex-direction: column;
+		position: absolute;
+		padding-top: 200rpx;
+	}
+
+	.listview {
+		position: absolute;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		/* #ifndef APP-NVUE */
+		display: flex;
+		flex-direction: column;
+		/* #endif */
+		/* #ifndef MP-ALIPAY */
+		flex-direction: column;
+		/* #endif */
+	}
+
+	.refresh {
+		justify-content: center;
+	}
+
+	.refresh-view {
+		/* #ifndef APP-NVUE */
+		display: flex;
+		/* #endif */
+		width: 750rpx;
+		height: 64px;
+		flex-direction: row;
+		flex-wrap: nowrap;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.refresh-icon {
+		width: 32px;
+		height: 32px;
+		transition-duration: .5s;
+		transition-property: transform;
+		transform: rotate(0deg);
+		transform-origin: 15px 15px;
+	}
+
+	.refresh-icon-active {
+		transform: rotate(180deg);
+	}
+
+	.loading-icon {
+		width: 28px;
+		height: 28px;
+		margin-right: 5px;
+		color: gray;
+	}
+
+	.loading-text {
+		margin-left: 2px;
+		font-size: 16px;
+		color: #999999;
+	}
+
+	.loading-more {
+		align-items: center;
+		justify-content: center;
+		padding-top: 14px;
+		padding-bottom: 14px;
+		text-align: center;
+	}
+
+	.loading-more-text {
+		font-size: 28upx;
+		color: #999;
+	}
+	.content{
+	}
+	
+	
+	
+	.image{
+		height: 260upx;
+	}
+	.content{
+		display: flex;
+		flex-direction: row;
+		width: 750upx;
+		flex-wrap: wrap;
+	}
+	.video_content{
+		padding: 3 3 3 3;
+		width: 248upx;
+	}
+	.title{
+		font-size: 8upx;
+	}
+</style>

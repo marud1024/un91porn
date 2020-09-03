@@ -1,0 +1,189 @@
+{
+	"pages": [
+		
+		{
+			"path": "pages/news/index",
+			"style" : {
+				"navigationStyle":"custom"
+			}
+		},
+		{
+		    "path" : "pages/test/videoList",
+		    "style" : {}
+		},
+		{
+		    "path" : "pages/info/userCenter",
+		    "style" : {
+				"navigationBarTitleText": "个人中心",
+				"app-plus": {
+					"titleNView": {
+						"buttons": [{
+							"text": "\ue502",
+							"fontSrc": "/static/uni.ttf",
+							"fontSize": "22px",
+							"color": "#FFFFFF"
+						}]
+					}
+				}
+			}
+		},
+		{
+			"path": "pages/detail/detail",
+			"style" : {
+				"navigationBarTitleText": "视频播放",
+				"app-plus": {
+					"titleNView": {
+						"buttons": [{
+							"text": "\ue405",
+							"fontSrc": "/static/uni.ttf",
+							"fontSize": "22px",
+							"color": "#FFFFFF"
+						}]
+					}
+				}
+			}
+		}
+        ,{
+            "path" : "pages/info/mycollect",
+            "style" : {
+				"navigationBarTitleText": "最近收藏"
+			}
+        },{
+            "path" : "pages/info/mycollect2",
+            "style" : {
+				"navigationBarTitleText": "我的收藏"
+			}
+        }
+        ,{
+            "path" : "pages/info/download",
+            "style" : {
+				"navigationBarTitleText": "下载"
+			}
+        }
+        ,{
+            "path" : "pages/info/local",
+            "style" : {
+				"navigationBarTitleText": "本地视频"
+			}
+        }
+        ,{
+            "path" : "pages/info/login",
+            "style" : {
+				"navigationBarTitleText": "登录"
+			}
+        }
+        ,{
+            "path" : "pages/info/register",
+            "style" : {
+				"navigationBarTitleText": "注册"
+			}
+        }
+        ,{
+            "path" : "pages/info/userInfo",
+            "style" : {}
+        }
+        ,{
+            "path" : "pages/info/report",
+            "style" : {
+				"navigationBarTitleText": "反馈",
+				"app-plus": {
+					"titleNView": {
+						"buttons": [{
+							"text": "\ue534",
+							"fontSrc": "/static/uni.ttf",
+							"fontSize": "22px",
+							"color": "#FFFFFF"
+						}]
+					}
+				}
+			}
+        }
+        ,{
+            "path" : "pages/detail/localDetail",
+            "style" : {
+            	"navigationBarTitleText": "视频播放",
+				"app-plus": {
+					"titleNView": {
+						"buttons": [{
+							"text": "\ue401",
+							"fontSrc": "/static/uni.ttf",
+							"fontSize": "22px",
+							"color": "#FFFFFF"
+						}]
+					}
+				}
+            }
+        }
+        ,{
+            "path" : "pages/test/test",
+            "style" : {}
+        }
+        ,{
+            "path" : "pages/test/userInfo",
+            "style" : {}
+        }
+        ,{
+            "path" : "pages/test/pageTest",
+            "style" : {}
+        }
+        ,{
+            "path" : "pages/setting/apiSetting",
+            "style" : {}
+        }
+        ,{
+            "path" : "pages/test/nineIndexTest",
+            "style" : {}
+        }
+        ,{
+            "path" : "pages/test/thorList",
+            "style" : {}
+        }
+        ,{
+            "path" : "pages/setting/moreSet",
+            "style" : {
+				"navigationBarTitleText": "设置"
+				}
+        }
+        ,{
+            "path" : "pages/setting/videoParse",
+            "style" : {}
+        }
+        ,{
+            "path" : "pages/setting/question",
+            "style" : {
+				"navigationBarTitleText": "常见问题"
+			}
+        }
+    ],
+	"globalStyle": {
+		"navigationBarTextStyle": "white",
+		"navigationBarTitleText": "1024",
+		"navigationBarBackgroundColor": "#5677FC",
+		"backgroundColor": "#F8F8F8",
+		"backgroundColorTop": "#F4F5F6",
+		"backgroundColorBottom": "#F4F5F6"
+	},
+	"tabBar": {
+		"color": "#7A7E83",
+		"selectedColor": "#5677FC",
+		"borderStyle": "black",
+		"backgroundColor": "#F8F8F8",
+		"height":"40px",
+		"animation":"true",
+		"list": [
+			{
+				"pagePath": "pages/news/index",
+				"iconPath": "static/home.png",
+				"selectedIconPath": "static/home-active.png",
+				"text": "首页"
+			},
+			{
+				"pagePath": "pages/info/userCenter",
+				"iconPath": "static/center.png",
+				"selectedIconPath": "static/center-active.png",
+				"text": "我的"
+			}
+			
+		]
+	}
+}

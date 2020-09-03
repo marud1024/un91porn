@@ -1,0 +1,154 @@
+<template>
+	<view class="content">
+		<view class="uni-form-item uni-column" style="width: 100%;height: 400rpx;border: 1rpx;border-color: #3F536E;">
+		 <textarea placeholder="god damn u,bro." focus v-model="content" 
+			style="width: 100%;height: 400rpx;border-width: 1rpx;border-color: #e9e9f8;"/>
+		</view>
+		<view class="primary_view">
+			<button class="primary" type="primary" @tap="saveReport">提交</button>
+		</view>
+	</view>
+</template>
+
+<script>
+	// #ifdef APP-PLUS
+	var domModule = weex.requireModule('dom');
+	domModule.addRule('fontFace', {
+	    'fontFamily': "uniicons",
+	    'src': "url('/static/uni.ttf')"
+	});
+	// #endif
+	import {
+		friendlyDate,decrypt,encrypt
+	} from '@/common/util.js';
+	export default {
+		data() {
+			return {
+				content:''
+			}
+		},
+		onLoad() {},
+		methods: {
+			 bindTextAreaBlur(e) {
+				this.content = e.detail.value
+			},
+			getUserId(){
+				let userInfo = uni.getStorageSync('userInfo');
+				console.log(userInfo);
+				let userId = ''
+				if (userInfo!='') {
+					let userInfoJson=JSON.parse(userInfo)
+					userId = userInfoJson.id;
+				}
+				console.log("userId: " + userId);
+				return userId;
+			},
+			saveReport(){
+				if (this.content != '') {
+					uni.request({
+						url: getApp().globalData.apiUrl+'/user/saveReport', 
+						data: {
+							content: this.content,
+							userId: this.getUserId()
+						},
+						header: {
+						   'content-type': 'application/json'
+						},
+						method:"POST",
+						success: (result) => {
+							this.content = ''
+							if(result.data.errorCode=='1001'){
+								uni.showToast({
+									title:'提交成功'
+								})
+							}else{
+								uni.showModal({
+								    title: '提示',
+								    content: result.data.errorMessage,
+									showCancel:false,
+								    success: function (res) {
+								    }
+								});
+							}
+						},
+						fail: (err) => {
+							console.log(err);
+							uni.showToast({
+								title:'服务器好像开小差了'
+							})
+						}
+					});
+				}
+				
+			}
+		},
+		onNavigationBarButtonTap(e) {
+			console.log("onNavigationBarButtonTap e: " + e);
+			uni.showToast({
+				title: '哈喽,狼友', 
+				icon: 'none'
+			});
+		}
+	}
+</script>
+
+<style lang="scss" scoped>
+	.content{
+		padding: 60upx 100upx 100upx;
+	}
+	.logo{
+		font-size: 48rpx;
+		font-weight: bold;
+	    text-align: center;
+	}
+	.uni-form-item{
+		margin-bottom: 40upx;
+		padding: 0;
+		border-bottom: 1px solid #e3e3e3;
+	}
+	.uni-input{
+		font-size: 30upx;
+	}
+	.column-with-btn{
+		display: flex;
+		flex-direction: row;
+		justify-content: space-between;
+		align-items: center;
+	}
+	.button{
+		font-size: 24upx;
+		margin: 0;
+		width: 180upx;
+		text-align: center;
+	}
+	.img-captcha{
+		width: 150upx;
+		height: 60upx;
+	}
+	.primary_view{
+		text-align: center;
+		align-items: center;
+		justify-content: center;
+	}
+	.primary{
+		border-radius: 0;
+		font-size: 30upx;
+		width: 280upx;
+		height: 90upx;
+		border-radius: 20;
+	}
+	.links{
+		text-align: center;
+		margin-top: 40upx;
+		font-size: 26upx;
+		color: #999;
+	}
+	.links_view{
+		display: inline-block;
+		vertical-align: top;
+		margin: 0 10upx;
+	}
+	.link-highlight{
+		color:  #b49950;
+	}
+</style>

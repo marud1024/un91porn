@@ -1,0 +1,33 @@
+<template>
+	<view>
+		<button class="btn" @click="navigateToPage('/pages/test/videoList')">视频列表</button>
+		<button class="btn" @click="navigateToPage('/pages/test/userInfo')">用户信息</button>
+		<button class="btn" @click="navigateToPage('/pages/test/pageTest')">分页测试</button>
+		<button class="btn" @click="navigateToPage('/pages/test/nineIndexTest')">nine测试</button>
+	</view>
+</template>
+
+<script>
+	export default {
+		data() {
+			return {
+				
+			}
+		},
+		methods: {
+			navigateToPage(path){
+				uni.navigateTo({
+					url: path
+				});	
+			}
+		}
+	}
+</script>
+
+<style>
+.btn{
+	margin: 20upx;
+	width: 230upx;
+	border-radius: 20;
+}
+</style>

@@ -1,0 +1,1286 @@
+<template>
+	<view>
+		<view class="view_video_content">
+			<video id="myVideo" :src="sourceUrl" ref="video" :poster="video.imageUrl" class="view_video" 
+			show-mute-btn="true" loop="true"  page-gesture="true" auto-play="true"></video>
+		</view>
+		<view class="view_title">
+			<text style="font-size: 33rpx;">{{isDownload ? '(本地)' : ''}}{{video.title}}</text>
+			<text style="font-size: 24rpx;" v-if="video.extInfo">{{video.extInfo}}</text>
+			<!-- <text style="font-size: 24rpx;" v-if="video.authorTitle">{{ '作者信息:'+video.authorName + ' ' + video.authorTitle}}</text>
+ -->		<text style="font-size: 28rpx;" v-if="video.brief" @click="showVideoBrief(50)">简介：{{getSubString(video.brief,0,50)}}</text>
+		</view>
+		<view class="operate_view">
+			<!-- #ifdef APP-PLUS-->
+			<uni-icons :type="isDownload ? 'download-filled' :'download'" color="#007aff" size="25" @click="downloadVideo" style="margin-left: 20rpx;"/>
+			<!-- #endif -->
+			<uni-icons :type="isCollected === 1 ? 'heart-filled' : 'heart'" color="#007aff" size="25" @click="collectVideo" :class="'operate-icon-'+isCollected"/>
+			<uni-icons type="redo" color="#007aff" size="25" @click="visitPage" :class="'operate-icon-'+isCollected"/>
+			<uni-icons type="chat" v-if="commentNum > 0" color="#007aff" size="25" @click="showComment" :class="'operate-icon-'+isCollected"/>
+			<uni-rate max="5" :value="videoSort" @change="saveSort" v-if="isCollected ==1" :class="'operate-icon-'+isCollected"></uni-rate>
+		</view>
+		<!-- #ifdef APP-PLUS -->
+		 <view v-if="downloadStatus">
+			<progress :percent="downloadpercent" show-info stroke-width="3" />
+		</view>
+		<!-- #endif -->
+		<view class="author-videos" v-for="(item, index) in authorVideos" :key="index">
+				<news-item :newsItem="item"  @click="goDetail(item)"></news-item>
+		</view>
+		
+		<uni-popup ref="showBrief" type="bottom" :mask-click="true">
+			<view class="popup_view">
+				<view class="popup_head_view">
+					<text> </text>
+					<text style="font-size: 28rpx;">简介</text>
+					<view @click="closePopUp(1)" class="close_popup">
+						<uni-icons type="closeempty" size="25"/>
+					</view>
+				</view>
+				<uni-list scroll-y="true" class="comment-view">
+					<uni-cell>
+						<view style="padding-left: 30rpx;padding-right: 30rpx;">
+							<text style="font-size: 30rpx;">{{video.brief}}</text>
+						</view>
+					</uni-cell>
+				</uni-list>
+			</view>
+		</uni-popup>
+		<uni-popup ref="showComment" type="bottom" :mask-click="true">
+			<view  class="popup_view">
+				<view class="popup_head_view">
+					<text> </text>
+					<text style="font-size: 28rpx;">{{commentNum}}评论</text>
+					<view @click="closePopUp(2)" class="close_popup">
+						<uni-icons type="closeempty" size="25" />
+					</view>
+				</view>
+				<uni-list scroll-y="true" class="comment-view"  @scrolltolower="loadMoreComment()">
+					<uni-cell>
+						<view class="comment" v-for="(comment, index) in comments" :key="index" v-if="commentNum > 0">
+							<view class="comment_1">
+								<text class="uname" @click="openCommentUser(comment)">{{comment.uName}}</text>
+								<text class="title-info">{{comment.titleInfo}}</text>
+							</view>
+							<view v-if="comment.commentQuote" style="margin-top:5rpx;margin-bottom:5rpx;margin-left: 50rpx;border-width: 1rpx;border-color: #C9D3FB;padding: 7rpx;width: 650rpx;">
+								<text class="comment-quote">{{comment.commentQuote}}</text>
+							</view>
+							<view style="padding-left: 30rpx;padding-right: 30rpx;">
+								<text class="comment-title">{{comment.commentContent}} {{comment.commentTime}}</text>
+							</view>
+						</view>
+					</uni-cell>
+				</uni-list>
+			</view>
+		</uni-popup>
+	</view>
+</template>
+
+<script>
+	import htmlParser from '@/common/html-parser'
+	import newsItem from '../news/news-item.nvue';
+	import uniList from '@/components/uni-list.vue';
+	import uniCell from '@/components/uni-cell.vue';
+	import uniRate from '@/components/uni-rate/uni-rate.vue'
+	import uniPopup from '@/components/uni-popup/uni-popup.vue'
+	import uniIcons from '@/components/uni-icons/uni-icons.vue'
+	const thorui = require("@/components/utils/clipboard.thorui.js")
+	import {
+		decrypt,encrypt,getFileSize
+	} from '@/common/util.js';
+	let player = null;
+
+	export default {
+		components: {
+			uniList,
+			uniCell,
+			newsItem,
+			uniRate,
+			uniPopup,
+			uniIcons
+		},
+		data() {
+			return {
+				video: {},
+				authorVideos:[],
+				comments:[],
+				commentPage:2,
+				commentNum:0,
+				sourceUrl:'',
+				collectModelValue:true,
+				downloadStatus:false,
+				isDownload:false,
+				localVideoPath: '',
+				iStatusBarHeight:0,
+				downloadpercent:0,
+				videoSort:0,
+				isCollected: 0
+			}
+		},
+		onNavigationBarButtonTap(e) {
+			if (this.sourceUrl != '') {
+				// #ifdef MP || H5
+				this.clipboard(this.sourceUrl)
+				// #endif
+				//#ifdef APP-PLUS
+				plus.share.sendWithSystem({
+					content: this.video.title,
+					href: this.sourceUrl
+				}, function() {
+					uni.showToast({title: '分享成功'});
+				}, function(e) {
+					uni.showToast({title: '分享失败'});
+					console.log('分享失败：' + JSON.stringify(e));
+				});
+				//#endif
+			}else{
+				uni.showToast({title: '视频地址获取失败'});
+			}
+		},
+		onShow(){
+			this.collectModelValue = getApp().globalData.collectModel
+		},
+		onLoad(event) {
+			this.iStatusBarHeight = uni.getSystemInfoSync().statusBarHeight
+			try {
+				let video = JSON.parse(decodeURIComponent(event.query));
+				this.video =video
+			} catch (error) {
+				this.video = JSON.parse(event.query);
+			}
+			console.log(this.video);
+			uni.setNavigationBarTitle({
+				title: this.video.title
+			});
+			// #ifdef APP-PLUS
+			this.checkLocalFileExists();
+			// #endif
+			this.getVideoDetail()
+
+		},
+		onReady() {
+			this.videoContext = uni.createVideoContext('myVideo',this)
+			 // #ifdef APP-PLUS
+			 let slipRightModelValue = uni.getStorageSync('slipRightModelValue');
+			 if (slipRightModelValue=='1') {
+			 	let ws = plus.webview.currentWebview();
+			 	//监听当前侧滑窗口的右滑
+			 	ws.drag({  
+			 		direction: 'right',  
+			 		moveMode: 'followFinger'  
+			 	}, {  
+			 		view: plus.runtime.appid,  
+			 		moveMode: 'silent'  
+			 	}, function(e) {  
+			 		if(e.type == 'end' && e.result) {  
+			 			uni.navigateBack()
+			 		}  
+			 	});
+			 }
+			 
+			// #endif
+		},
+		onUnload() {
+			console.log('onUnload');
+			this.videoContext.pause();
+		},
+		onHide() {
+			console.log('onHide');
+			this.videoContext.pause();
+		},
+		methods: {
+			openCommentUser(comment){
+				plus.runtime.openURL(getApp().globalData.apiUrl + "/" + comment.ulink);
+			},
+			clipboard(data) {
+				thorui.getClipboardData(data, (res) => {
+					if (res) {
+						uni.showToast({title: '链接已复制'});
+					} else {
+						uni.showToast({title: '链接复制失败'});
+					}
+				})
+			},
+			getIp(){
+				return Math.floor(Math.random()*255)+'.'+Math.floor(Math.random()*255)+'.'+Math.floor(Math.random()*255)+'.'+Math.floor(Math.random()*255);
+			},
+			closePopUp(type){
+				if (type == 1) {
+					this.$refs.showBrief.close()
+				}else if (type == 2) {
+					this.$refs.showComment.close()
+				}
+			},
+			showVideoBrief(maxLength){
+				if (this.video.brief.length > maxLength) {
+					this.$refs.showBrief.open()
+				}
+			},
+			showComment(){
+				this.$refs.showComment.open()
+			},
+			getSubString(str,start,end){
+				try {
+					if (str.length > end) {
+						return str.substring(start,end)+"..."
+					}else{
+						return str
+					}
+				} catch (error) {
+					return ""
+				}
+			},
+			getComment(){
+				let extInfo = this.video.extInfo
+				let commentNumStr = extInfo.substring(extInfo.lastIndexOf(':')+1,extInfo.length)
+				let commentNum = commentNumStr.replace(/\s+/g,"")
+				this.commentNum = commentNum
+				if(commentNum > 0){
+					let url =getApp().globalData.apiUrl + "/show_comments2.php?VID=" + this.video.videoId + "&start=1&comment_per_page=20"
+					console.log(url);
+					uni.request({
+					    url: url,
+					    data: {},
+						header: {
+								'user-agent': 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.100 Safari/537.36', //自定义请求头信息
+								//'X-Forwarded-For':getApp().globalData.randomIp,
+								'Referer':getApp().globalData.apiUrl + "/view_video.php?viewkey=" + this.video.videoKey,
+								'Accept-Language':'zh-CN,zh;q=0.8,en-US;q=0.6,en;q=0.4',
+								'X-Requested-With':'XMLHttpRequest'
+						},
+					    success: (res) => {
+							this.parseComment(res.data.toString().trim())
+					    },
+						fail: (err) => {
+							console.log(err.errMsg);
+						}
+					});
+				}
+			},
+			loadMoreComment(){
+				console.log('loadMoreComment')
+				let commentTotalPage = parseInt(this.commentNum/20 + 1)
+				console.log('commentPage:'+this.commentPage + ',commentTotalPage:'+commentTotalPage)
+				if(this.commentPage > commentTotalPage){
+					return;
+				}
+				uni.request({
+				    url: getApp().globalData.apiUrl + "/show_comments2.php?VID=" + this.video.videoId + "&start="+this.commentPage+"&comment_per_page=20",
+				    data: {},
+					header: {
+							'user-agent': 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.100 Safari/537.36', //自定义请求头信息
+							//'X-Forwarded-For':getApp().globalData.randomIp,
+							'Referer':getApp().globalData.apiUrl + "/view_video.php?viewkey=" + this.video.videoKey,
+							'Accept-Language':'zh-CN,zh;q=0.8,en-US;q=0.6,en;q=0.4',
+							'X-Requested-With':'XMLHttpRequest'
+					},
+				    success: (res) => {
+						this.parseComment(res.data.toString().trim())
+				    },
+					fail: (err) => {
+						console.log(err.errMsg);
+					},
+					complete() {
+						this.commentPage = this.commentPage+1
+					}
+				});
+			},
+			parseComment(html){
+				let commentArray = new Array();
+				let doc = htmlParser(html);
+				let commentListHtml = doc.getElementsByTagName('TABLE');
+				for(var i=0;i<commentListHtml.length;i++){
+					let htmlstr =  commentListHtml[i].innerHTML
+					
+					let commentHtml = htmlParser(htmlstr);
+					
+					let uname = "";
+					let ulink = "";
+					let links = commentHtml.getElementsByTagName('A')
+					for (var k = 0; k < links.length; k++) {
+						let link = links[k]
+						let href = link.attributes.href
+						if (href.indexOf('uprofile.php') != -1) {
+							ulink = href
+							uname = link.innerHTML
+							if (uname.indexOf('<a') != -1) {
+								uname = uname.substring(0,uname.indexOf('<a'))
+							}
+							
+						}
+					}
+					uname = this.getSimpleText(uname)
+					let commentTimeInfo = commentHtml.getElementsByClassName('comment-info')[0];
+					commentTimeInfo = commentTimeInfo.innerHTML
+					
+					let commentContent = commentHtml.getElementsByClassName('comment-body')[0];
+					commentContent = commentContent.innerHTML
+					commentContent = commentContent.substring(0,commentContent.indexOf('<br>'))
+					commentContent = this.getSimpleText(commentContent)
+					
+					let commentQuote = commentHtml.getElementsByClassName('comment_quote');
+					let commentQuoteContent = "";
+					if (commentQuote.length>0) {
+						commentQuoteContent = commentQuote[0].innerHTML
+						commentQuoteContent = this.getSimpleText(commentQuoteContent)
+						commentContent = commentContent.replace(commentQuoteContent,'')
+					}
+					
+					let commentUserTitleInfo = commentHtml.getElementsByTagName('td')[0];
+					commentUserTitleInfo = commentUserTitleInfo.innerHTML
+					commentUserTitleInfo = commentUserTitleInfo.substring(0,commentUserTitleInfo.indexOf("<SPAN class='comment-info'>"))
+					commentUserTitleInfo = this.getSimpleText(commentUserTitleInfo)
+					commentUserTitleInfo = commentUserTitleInfo.replace(uname,'')
+					
+					let comment = new Object();
+					comment.uName = uname
+					comment.ulink = ulink
+					comment.commentQuote = commentQuoteContent
+					comment.titleInfo = commentUserTitleInfo
+					comment.commentContent = commentContent
+					comment.commentTime = commentTimeInfo
+					commentArray.push(comment)
+					this.comments.push(comment) 
+				}
+				console.log(commentArray.length);
+				return commentArray
+			},
+			saveSort(num){
+				let link = this.video.link
+				let videoKey = this.getVideoKey(link);
+				let sql = "update video set sort = '"+num.value+"' where video_key='"+videoKey+"'"
+				if(this.isOpenDB()){
+					plus.sqlite.executeSql({
+						name: 'video',
+						sql: sql,
+						success: function(e) {
+							uni.showToast({
+								title: '评分成功',
+								position:'bottom'
+							});
+							console.log('saveSort成功');
+						},
+						fail: function(e) {
+							uni.showToast({
+								title: '评分失败',
+								position:'bottom'
+							});
+							console.log('saveSort失败: ' + JSON.stringify(e));
+						}
+					});
+				}
+			},
+			getVideoKey(link){
+				return  link.substring(link.indexOf("=") + 1, link.indexOf("&") != -1 ? link.indexOf("&") : link.length)
+			},
+			goDetail(detail) {
+				this.videoContext.pause();
+				uni.navigateTo({
+					url: '/pages/detail/detail?query=' + encodeURIComponent(JSON.stringify(detail))
+				});
+			},
+			visitPage(){
+				plus.runtime.openWeb(this.video.link);
+			},
+			getAuthorVideos(){
+				uni.request({
+					//http://627.workarea8.live/uvideos.php?UID=13f8UpMaCJpPUlv90r13hfaXO00Dbn1XxfO4vpF2AaAB3cLF&type=public
+					url: getApp().globalData.apiUrl+"/uvideos.php?UID=" + this.video.ownerId + "&type=public", 
+					data: {},
+					header: {
+							'user-agent': 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.100 Safari/537.36', //自定义请求头信息
+							//'X-Forwarded-For':getApp().globalData.randomIp,
+							'Referer':getApp().globalData.apiUrl+'/index.php',
+							'Accept-Language':'zh-CN,zh;q=0.8,en-US;q=0.6,en;q=0.4'
+					},
+					success: (result) => {
+						if (result.statusCode == 200) {
+							var videos = this.parseAuthorVideos(result.data);
+							this.authorVideos = videos
+						}
+					},
+					fail: (err) => {
+						console.log(err);
+					}
+				});
+			},
+			parseAuthorVideos(html){
+				let videoArray = new Array();
+				let doc = htmlParser(html.toString().trim());
+				let videoListHtml = doc.getElementsByClassName('col-xs-12');
+				for(var i=0;i<videoListHtml.length;i++){
+					let htmlstr =  videoListHtml[i].innerHTML
+					let videoHtml = htmlParser(htmlstr);
+					let linkHtml = videoHtml.getElementsByTagName('a')[0];
+					let imgHtml = videoHtml.getElementsByTagName('img')[0];
+					let durationHtml = videoHtml.getElementsByClassName('duration')[0];
+					let titleHtml = videoHtml.getElementsByClassName('video-title')[0];
+					let infoHtml = htmlstr.substring(htmlstr.indexOf('添加时间'),htmlstr.indexOf('积分'))
+					linkHtml = linkHtml.tagContent
+					imgHtml = imgHtml.tagContent
+					let link = linkHtml.replace('<a href="','').replace('">','')
+					let imageUrl = imgHtml.substring(imgHtml.indexOf('http'),imgHtml.lastIndexOf('"'))
+					let duration = durationHtml.innerHTML;
+					let title = titleHtml.innerHTML;
+					let extInfo = this.getSimpleText(infoHtml);
+					let video = new Object();
+					video.link = link;;
+					video.imageUrl = imageUrl;
+					video.duration = duration;
+					video.title = title;
+					video.extInfo = "时长:"+duration+extInfo;
+					videoArray.push(video)
+				}
+				return videoArray;
+			},
+			async cancleCollectVideo(){
+				let res = await this.cancleCollectVideoDB()
+				if (res == '1') {
+					this.isCollected=0
+				}
+			},
+			async cancleCollectVideoDB(){
+				let link = this.video.link
+				let videoKey = this.getVideoKey(link);
+				let sql ="delete from video where video_key='"+videoKey+"'"
+				console.log(sql);
+				return new Promise(resolve => {
+					if(this.isOpenDB()){
+						plus.sqlite.executeSql({
+							name: 'video',
+							sql:sql ,
+							success: function(e) {
+								uni.showToast({
+									title: '取消收藏成功',
+									position:'bottom'
+								});
+								resolve('1')
+							},
+							fail: function(e) {
+								uni.showToast({
+									title: '取消收藏失败',
+									position:'bottom'
+								});
+								console.log('cancleCollectVideo失败: ' + JSON.stringify(e));
+								resolve('0')
+							}
+						});
+					}
+				});
+				
+			},
+			async isCollectedVideo(url){
+				if(this.isOpenDB()){
+					let videos = await this.getCollectedVideo(url)
+					if(videos !='' && videos.length>0){
+						this.isCollected = 1
+						this.videoSort=videos[0].sort
+					}
+				}
+			},
+			async getCollectedVideo(link){
+				let videoKey = this.getVideoKey(link);
+				let sql = "select id, title,datetime(create_date/1000, 'unixepoch') AS createDate,image_url AS imageUrl,source_url AS sourceUrl,ext_info AS extInfo,link,video_key AS videoKey,sort  from video where video_key='"+videoKey+"' order by create_date desc limit 1"
+				return new Promise(resolve => {
+					plus.sqlite.selectSql({
+						name: 'video',
+						sql: sql,
+						success: function(e) {
+							resolve(e);
+						},
+						fail: function(e) {
+							console.log(' isCollectedVideo查询SQL语句失败: ' + JSON.stringify(e));
+						}
+					});
+				});
+			},
+			async collectVideo(){
+				if (this.isCollected == 1) {
+					console.log('cancleCollectVideo');
+					this.cancleCollectVideo()
+				}else{
+					if(this.isOpenDB()){
+						console.log('getCollectedVideo');
+						let videos = await this.getCollectedVideo(this.video.link)
+						if(videos !='' && videos.length>0){
+							this.isCollected = 1
+							this.videoSort=videos[0].sort
+							uni.showToast({
+								title: '已收藏',
+								position:'bottom'
+							});
+							return
+						}
+					}
+					
+					let url = getApp().globalData.apiUrl+'/add_favorite.php?VID='+this.video.VID+'&UID=7757915&VUID='+this.video.VUID
+					console.log(url);
+					uni.request({
+					    url: url,
+					    data: {},
+						header: {
+								'user-agent': 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.100 Safari/537.36', //自定义请求头信息
+								//'X-Forwarded-For':getApp().globalData.randomIp,
+								'Referer':getApp().globalData.apiUrl+'/index.php',
+								'Accept-Language':'zh-CN,zh;q=0.8,en-US;q=0.6,en;q=0.4'
+						},
+					    success: (res) => {
+							console.log(res)
+							if (res.data == '0') {
+								uni.showToast({
+									title: '收藏成功',
+									position:'bottom'
+								});
+							}else{
+								
+							}
+					    },
+						fail: (err) => {
+							console.log(err.errMsg);
+						}
+					});
+					let res = await this.saveCollectVideo2DB()
+					if (res == '1') {
+						this.isCollected=1
+					}
+					console.log(res)
+				}
+				
+			},
+			async saveCollectVideo2DB(){
+				let vuid = this.video.VUID
+				let vid = this.video.VID
+				let videoKey = this.video.videoKey
+				let ownerId = this.video.ownerId
+				let link = this.video.link
+				let imageUrl = this.video.imageUrl
+				let sourceUrl = this.video.sourceUrl
+				let title = this.video.title
+				let extInfo = this.video.extInfo
+				let createDate = new Date().getTime()
+				let viewNum = this.video.viewNum
+				let collectNum = this.video.collectNum
+				let commentNum = this.video.commentNum
+				
+				let sql = "insert into video values(null,'"+createDate+"','"+extInfo+"','"+sourceUrl+"','"+
+				imageUrl+"','"+link+"','"+title+"','"+ownerId+"','"+videoKey+"','"+vid+"','"+
+				vuid+"','"+viewNum+"','"+collectNum+"','"+0+"','"+commentNum+"','"+0+"')"
+				
+				return new Promise(resolve => {
+					if(this.isOpenDB()){
+						plus.sqlite.executeSql({
+							name: 'video',
+							sql: 'CREATE TABLE IF NOT EXISTS video ( "id" INTEGER PRIMARY KEY AUTOINCREMENT, "create_date" VARCHAR(100), "ext_info" VARCHAR (1000), "source_url" VARCHAR (255), "image_url" VARCHAR (255), "link" VARCHAR (255), "title" VARCHAR (255), "owner_id" VARCHAR (255), "video_key" VARCHAR (255) UNIQUE, "vid" VARCHAR (255), "vuid" VARCHAR (255), "view_num" INT (11), "collecte_num" INT (11), "sort" INT (11), "comment_num" INT (11), "user_id" INT (20))',
+							success: function(e) {
+								plus.sqlite.executeSql({
+									name: 'video',
+									sql: sql,
+									success: function(e) {
+										console.log('创建表table和插入数据成功');
+										resolve('1')
+									},
+									fail: function(e) {
+										uni.showToast({
+											title: '本地收藏失败',
+											position:'bottom'
+										});
+										console.log('创建表table成功但插入数据失败: ' + JSON.stringify(e));
+										resolve('0')
+									}
+								});
+							},
+							fail: function(e) {
+								uni.showToast({
+									title: '本地收藏失败',
+									position:'bottom'
+								});
+								console.log('创建表table失败: ' + JSON.stringify(e));
+								resolve('0')
+							}
+						});
+					}
+				});
+				
+			},
+			getVideoDetail() {
+				let url = this.video.link
+				url = url.replace('https','http')
+				let apiUrl = getApp().globalData.apiUrl
+				if (apiUrl.indexOf('91porn') == -1 && url.indexOf('91porn') != -1) {
+					url = url.substring(url.indexOf('.com')+4,url.length)
+					url= apiUrl + url
+				}
+				getApp().globalData.randomIp = this.getIp()
+				console.log(url)
+				uni.request({
+				    url: url,
+				    data: {},
+					header: {
+							'user-agent': 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.100 Safari/537.36', //自定义请求头信息
+							//'X-Forwarded-For':getApp().globalData.randomIp,
+							'Referer':getApp().globalData.apiUrl+'/index.php',
+							'Accept-Language':'zh-CN,zh;q=0.8,en-US;q=0.6,en;q=0.4'
+					},
+				    success: (res) => {
+						let statusCode = res.statusCode
+						let video = this.parseVideo(res.data);
+						if (JSON.stringify(video) != '{}') {
+							this.video = video
+						}
+					   console.log('play online')
+					   setTimeout(() => {
+					       this.videoContext.play()
+					   }, 200)
+					   this.isCollectedVideo(url)
+					   this.getAuthorVideos()
+					   this.getComment()
+				    },
+					fail: (err) => {
+						console.log(err.errMsg);
+						uni.showToast({
+							title: '连接超时,请刷新重试',
+							position:'bottom'
+						});
+					}
+				});
+				
+			},
+			parseVideo(html){
+				let video = new Object();
+				try{
+					let sourceUrl = this.getVideoUrl(html);
+					let doc = htmlParser(html.toString().trim());
+					let authorInfoHtmlStr = doc.getElementsByClassName('title-yakov');
+					authorInfoHtmlStr = authorInfoHtmlStr[2].innerHTML
+					authorInfoHtmlStr = (authorInfoHtmlStr.toString().trim());
+					let authorInfo = htmlParser(authorInfoHtmlStr)
+					let authorName =  authorInfo.getElementsByTagName('span')[0];
+					authorName = authorName.innerHTML
+					
+					authorName = authorName.substring(0,authorName.indexOf('<a'))
+					let uidLinks = authorInfo.getElementsByTagName('a');
+					let uidStr = ''
+					for(var i=0;i<uidLinks.length;i++){
+						let uidLink = uidLinks[i];
+						let href =uidLink.attributes.href;
+						if(href.indexOf('UID') != -1){
+							uidStr = href.substring(href.indexOf('UID=')+4, href.length);
+						}
+						
+					}
+					let authorMoreInfoHtmlStr = doc.getElementsByClassName('videodetails-yakov')[1];
+					authorMoreInfoHtmlStr = authorMoreInfoHtmlStr.innerHTML;
+					let authorMoreInfoDoc = htmlParser(authorMoreInfoHtmlStr);
+					let authorTitleInfo = authorMoreInfoDoc.getElementsByClassName('title')[2];
+					let authorTitleStr = authorTitleInfo.innerHTML;
+					authorTitleStr = this.getSimpleText(authorTitleStr);
+					let authorTitle = authorTitleStr.substring(0,authorTitleStr.indexOf('简介'));
+					authorTitle = authorTitle.replace(new RegExp(/&nbsp;/g),' ');
+					let videoDesc = authorTitleStr.substring(authorTitleStr.indexOf('简介'),authorTitleStr.length);
+					videoDesc = videoDesc.substring(videoDesc.indexOf(':')+1,videoDesc.length);
+					let link = this.video.link
+					let videoKey = this.getVideoKey(link);
+					console.log(sourceUrl);
+					let sourceUrl2 = sourceUrl.substring(0,sourceUrl.indexOf("?"));
+					let startIndex = sourceUrl2.lastIndexOf("/");
+					let endIndex = sourceUrl2.indexOf(".mp4");
+					console.log(sourceUrl2);
+					let videoId = sourceUrl2.substring(startIndex + 1, endIndex);
+					
+					let VID = doc.getElementById('VID');
+					let VIDStr = VID.innerHTML
+					let VUID = doc.getElementById('VUID');
+					let VUIDStr = VUID.innerHTML
+					
+					video.VID = VIDStr;
+					video.VUID = VUIDStr;
+					video.videoKey = videoKey;
+					video.videoId = videoId;
+					video.authorName = authorName;
+					video.ownerId = uidStr;
+					video.sourceUrl = sourceUrl;
+					video.authorTitle = authorTitle;
+					video.brief = videoDesc;
+					video.imageUrl = this.video.imageUrl
+					video.duration = this.video.duration
+					video.link = link
+					video.title = this.video.title
+					let extInfo = this.video.extInfo
+					video.extInfo = extInfo
+					let viewNumStr =  extInfo.substring(extInfo.indexOf("查看"),extInfo.indexOf("收藏"));
+					let collectNumStr =  extInfo.substring(extInfo.indexOf("收藏"),extInfo.indexOf("留言"));
+					let commentNumStr =  extInfo.substring(extInfo.indexOf("留言"),extInfo.length);
+					let viewNum = viewNumStr.replace(/[^0-9]/ig,"")
+					let collectNum = collectNumStr.replace(/[^0-9]/ig,"")
+					let commentNum = commentNumStr.replace(/[^0-9]/ig,"")
+					video.viewNum= viewNum
+					video.collectNum= collectNum
+					video.commentNum= commentNum
+				}catch(err){
+					console.log(err)
+				}
+				return video;
+			},
+			getSimpleText(html){
+				let re1 = new RegExp("<[^<>]+>","g");
+				let msg = html.replace(re1,'');
+				msg = msg.replace(new RegExp(/&nbsp;/g),' ').replace(/[\r\n]/g,"").replace(/\ +/g,"")
+				return msg;
+			},
+			isValidUrl(url){
+				uni.request({
+					url: url,
+					data: {},
+					success: (res) => {
+						let statusCode = res.statusCode
+						console.log(statusCode);
+						if (statusCode == 200) {
+							return true
+						}else{
+							return false
+						}
+					},
+					fail: (err) => {
+						return false
+						console.log(err.errMsg);
+					}
+				});	
+				return false
+			},
+			getVideoUrl2(html){//直接获取source标签中的地址
+				let doc = htmlParser(html.toString().trim());
+				try{
+					let sourceDoc =  doc.getElementsByTagName('source')[0];
+					console.log(sourceDoc);
+					let source_str =  sourceDoc.attributes.src;
+					console.log(source_str);
+					if (source_str != '') {
+						return source_str;
+					}
+				}catch(e){
+				}
+				return '';
+			},
+			getVideoUrl3(html){//获取分享地址，去分享页获取视频地址
+				let doc = htmlParser(html.toString().trim());
+				try{
+					let videoText = doc.getElementById('fm-video_link');
+					let videoText2 = videoText.innerHTML
+					console.log(videoText2);
+					uni.request({
+						url: videoText2,
+						data: {},
+						header: {
+								'user-agent': 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.100 Safari/537.36', //自定义请求头信息
+								//'X-Forwarded-For':getApp().globalData.randomIp,
+								'Accept-Language':'zh-CN,zh;q=0.8,en-US;q=0.6,en;q=0.4'
+						},
+						success: (res) => {
+							let statusCode = res.statusCode
+							let doc2 = htmlParser(res.data.trim());
+							let sourceDoc =  doc2.getElementsByTagName('source')[0];
+							let source_str =  sourceDoc.attributes.src;
+							console.log(source_str);
+							// let isValid = this.isValidUrl(source_str)
+							// console.log(isValid);
+							// if (source_str != '' && isValid) {
+								
+							// }
+							this.setVideoUrl(source_str)
+							return source_str
+						},
+						fail: (err) => {
+							console.log(err.errMsg);
+						}
+					});
+				}catch(e){
+				}
+				return '';
+			},
+			setVideoUrl(sourceUrl){
+				console.log('sourceUrl:'+sourceUrl);
+				if(!this.isDownload){
+					if(sourceUrl != ''){
+						uni.showToast({
+							title: '视频地址解析成功',
+							position:'bottom'
+						});
+						this.sourceUrl = sourceUrl
+					}
+				}
+			},
+			getVideoUrl(html){
+				
+				let source_str = this.getVideoUrl2(html);
+				console.log(source_str);
+				// let isValid = this.isValidUrl(source_str)
+				// console.log(isValid);
+				if (source_str != '') {
+					this.setVideoUrl(source_str)
+					return source_str;
+				}
+				
+				try{
+					//页面解密获取地址
+					let index = html.indexOf("document.write(strencode");
+					let str = html.substring(index, index + 600);
+					let split = str.split('"');
+					let param1 = split[1];
+					let param2 = split[3];
+					let param3 = split[5];
+					// console.log(param1);
+					// console.log(param2);
+					// console.log(param3);
+					param1 = atob(param1)
+					param1 = new String(param1);
+					for (let i = 0, k = 0; i < param1.length; i++) {
+						k = i % param2.length;
+						source_str += "" + String.fromCharCode(param1.codePointAt(i) ^ param2.codePointAt(k));
+					}
+					source_str = atob(source_str)
+					console.log(source_str)
+					source_str = source_str.substring(source_str.indexOf('http'))
+					console.log(source_str)
+					isValid = this.isValidUrl(source_str)
+					console.log(isValid);
+					if (isValid) {
+						this.setVideoUrl(source_str)
+						return;
+					}
+				}catch(e){
+					//TODO handle the exception
+				}
+				
+				this.getVideoUrl3(html);
+				
+			},
+			getUserId(){
+				let userInfo = uni.getStorageSync('userInfo');
+				if (userInfo!='') {
+					let userInfoJson=JSON.parse(userInfo)
+					return userInfoJson.id;
+				}
+				return '';
+			},
+			checkLocalFileExists() {
+				var isLocalExists = false;
+				let filename = '_downloads/'+this.video.title+'.mp4'
+				plus.io.resolveLocalFileSystemURL(filename, (entry) => {
+					let path = plus.io.convertLocalFileSystemURL(filename);
+					this.moveVideo(path)
+				}, (e) => {
+				})
+				if(!isLocalExists){
+					var environment = plus.android.importClass("android.os.Environment");
+					var flag = environment.getExternalStorageState() === environment.MEDIA_MOUNTED;
+					var sdRoot = environment.getExternalStorageDirectory();
+					var filePath = sdRoot + "/"+getApp().globalData.downloadDir+"/"+this.video.title+'.mp4';
+					var File = plus.android.importClass("java.io.File");
+					var file = new File(filePath);
+					if(file.exists()){
+						isLocalExists = true;
+						this.localVideoPath = filePath
+					}
+				}
+				
+				if(isLocalExists){
+					this.isDownload=true;
+					this.sourceUrl = this.localVideoPath
+					console.log("local video exists:"+this.localVideoPath)
+					uni.setNavigationBarTitle({
+						title: '(本地)'+this.video.title
+					});
+				}
+			},
+			deleteLocalFile() {
+				let filename = '_downloads/'+this.video.title+'.mp4'
+				console.log("checkLocalFile:"+filename)
+				plus.io.resolveLocalFileSystemURL(filename, (entry) => {
+					this.localVideoPath = plus.io.convertLocalFileSystemURL(filename);
+					console.log("remove tmp video:"+this.localVideoPath)
+					entry.remove()
+				}, (e) => {
+					console.log("local tmp video not exists:"+filename)
+				})
+			},
+			moveVideo(path){
+				this.creatFolder()
+				var environment = plus.android.importClass("android.os.Environment");
+				var flag = environment.getExternalStorageState() === environment.MEDIA_MOUNTED;
+				var sdRoot = environment.getExternalStorageDirectory();
+				
+				var filePath = sdRoot + "/"+getApp().globalData.downloadDir+"/"+this.video.title+'.mp4';
+				var File = plus.android.importClass("java.io.File");
+				var file = new File(path);
+				var newFile = new File(filePath);
+				file.renameTo(newFile)
+				console.log('move file to:'+filePath);
+			},
+			getLocalVideoImage(){
+				var environment = plus.android.importClass("android.os.Environment");
+				var flag = environment.getExternalStorageState() === environment.MEDIA_MOUNTED;
+				var sdRoot = environment.getExternalStorageDirectory();
+				var File = plus.android.importClass("java.io.File");
+				const plug=uni.requireNativePlugin("Html5app-VideoCover");
+				//获取本地视频封面图片
+				var imageUrl = sdRoot + "/" + getApp().globalData.downloadDir
+								+ "/" + getApp().globalData.imageDir + "/" + this.video.title +".jpg";
+				 var imageFile = new File(imageUrl);
+				if(!imageFile.exists()){
+					 plug.setVideoPath({"url":this.video.sourceUrl},ret=>{
+						var imageTmpUrl = ret.image;
+						imageTmpUrl = imageTmpUrl.replace('file:///storage/emulated/0/','')
+						imageTmpUrl = sdRoot + "/VideoCropImage/image_videoimage.jpg"
+						console.log("imageTmpUrl: " + imageTmpUrl);
+						var tmpFile = new File(imageTmpUrl);
+						tmpFile.renameTo(imageFile)
+					 });
+				}
+			},
+			creatFolder(){
+				var environment = plus.android.importClass("android.os.Environment");
+				var flag = environment.getExternalStorageState() === environment.MEDIA_MOUNTED;
+				var sdRoot = environment.getExternalStorageDirectory();
+				var File = plus.android.importClass("java.io.File");
+				var dirPath = sdRoot + "/" + getApp().globalData.downloadDir + "/" + getApp().globalData.imageDir;
+				var downloadDir = new File(dirPath);
+				if(!downloadDir.exists()){
+					var res = downloadDir.mkdirs();
+					console.log("downloadDir mkdirs:"+res);
+				}else{
+					console.log("downloadDir is exists");
+				}
+			},
+			downloadVideo() {
+				let url = this.video.sourceUrl;
+				if(url == undefined || url == ''){
+					uni.showToast({
+						title: '视频还没准备好',
+						position:'bottom'
+					});
+					return;
+				}
+				
+				// #ifdef APP-PLUS
+				uni.showToast({
+					title: '开始下载',
+					position:'bottom'
+				});
+				this.downloadVideoImage()
+				this.deleteLocalFile()
+				let filename = '_downloads/'+this.video.title+'.mp4'
+				let dtask = plus.downloader.createDownload(url, {
+					filename: filename
+				});
+				this.downloadStatus = true;
+				dtask.addEventListener("statechanged", (download, status) => {
+					if (download.state == 4 && status == 200) {
+						uni.showToast({
+							title: '下载完成',
+							position:'bottom'
+						});
+						this.downloadStatus = false
+						this.localVideoPath = plus.io.convertLocalFileSystemURL(filename); //获取真实本地url路径
+						console.log('tmp video download complete,move path:'+this.localVideoPath);
+						//this.moveVideo(this.localVideoPath) 下载退出页面时 下载会继续但会移动失败
+						var environment = plus.android.importClass("android.os.Environment");
+						var flag = environment.getExternalStorageState() === environment.MEDIA_MOUNTED;
+						var sdRoot = environment.getExternalStorageDirectory();
+						
+						var filePath = sdRoot + "/"+getApp().globalData.downloadDir+"/"+this.video.title+'.mp4';
+						var File = plus.android.importClass("java.io.File");
+						var file = new File(this.localVideoPath);
+						var newFile = new File(filePath);
+						file.renameTo(newFile)
+						console.log('move file to:'+filePath);
+						this.isDownload=true;
+					}
+					if(download.state == 3){
+						var pec = download.downloadedSize/download.totalSize
+						this.downloadpercent = parseInt(pec*100)
+					}
+				}, false);
+				dtask.start();
+				// #endif
+				// #ifdef H5
+					window.open(url)
+				// #endif
+			},
+			deleteVideoImage() {
+				let filename = '_downloads/'+this.video.title+'.mp4.jpg'
+				console.log("checkLocalVideoImage:"+filename)
+				plus.io.resolveLocalFileSystemURL(filename, (entry) => {
+					this.localVideoPath = plus.io.convertLocalFileSystemURL(filename); 
+					console.log("remove tmp video:"+this.localVideoPath)
+					entry.remove()
+				}, (e) => {
+					console.log("local tmp VideoImage not exists:"+filename)
+				})
+			},
+			downloadVideoImage() {
+				this.deleteVideoImage()
+				let url = this.video.imageUrl;
+				let filename = '_downloads/'+this.video.title+'.mp4.jpg'
+				let dtask = plus.downloader.createDownload(url, {
+					filename: filename
+				});
+				dtask.addEventListener("statechanged", (download, status) => {
+					if (download.state == 4 && status == 200) {
+						var localVideoImagePath= plus.io.convertLocalFileSystemURL(filename); //获取真实本地url路径
+						console.log('tmp video image download complete,move path:'+localVideoImagePath);
+						this.moveVideoImage(localVideoImagePath)
+					}
+				}, false);
+				dtask.start();
+			},
+			moveVideoImage(path){
+				this.creatFolder()
+				var environment = plus.android.importClass("android.os.Environment");
+				var flag = environment.getExternalStorageState() === environment.MEDIA_MOUNTED;
+				var sdRoot = environment.getExternalStorageDirectory();
+				var filePath = sdRoot + "/" + getApp().globalData.downloadDir
+								+ "/" + getApp().globalData.imageDir + "/" + this.video.title +".mp4.jpg";
+				var File = plus.android.importClass("java.io.File");
+				var file = new File(path);
+				var newFile = new File(filePath);
+				if (newFile != null && newFile.exists()){
+					newFile.delete();
+					console.log("delete exists old image" );
+				}
+				file.renameTo(newFile)
+				console.log('move video image file to:'+filePath);
+			},
+			playLocalVideo() {
+				uni.setNavigationBarTitle({
+					title: '(本地)'+this.video.title
+				});
+				this.video.title = '(本地)'+this.video.title
+				console.log('play local');
+				this.video.sourceUrl=this.localVideoPath;
+				this.video.imageUrl='';
+				setTimeout(() => {
+				    this.videoContext.play()
+				}, 200)
+			},
+			openDB() {
+				// #ifdef APP-PLUS
+				plus.sqlite.openDatabase({
+					name: 'video',
+					path: '_doc/marud1024.db',
+					success: function(e) {
+						console.log('打开数据库marud1024.db成功 ');
+						return true
+					},
+					fail: function(e) {
+						console.log('打开数据库marud1024.db失败: ' + JSON.stringify(e));
+						return false
+					}
+				});
+				// #endif
+			},
+			isOpenDB() {
+				// #ifdef APP-PLUS
+				if (
+					plus.sqlite.isOpenDatabase({
+						name: 'video',
+						path: '_doc/marud1024.db',
+					})
+				) {
+					return true
+					console.log('db Opened!');
+				} else {
+					return this.openDB()
+					console.log('db Unopened!');
+				}
+				// #endif
+			},
+		}
+	}
+</script>
+
+<style>
+	/* #ifndef APP-PLUS */
+	page {
+		min-height: 100%;
+	}
+	/* #endif */
+	
+	.view_video{
+		width: 750rpx;
+		height: 700upx;
+	}
+	
+	.view_video_content{
+		width: 750rpx;
+		height: 700upx;
+		position: fixed;
+		z-index:2
+	}
+	
+	.view_title{
+		padding-top: 710upx;
+		display: flex;
+		padding-left: 30rpx;
+	}
+	
+	.operate_view{
+		display: flex;
+		flex-direction: row;
+		padding-top: 10upx;
+	}
+	
+	.popup_view{
+		border-color: #DEDEDE; 
+		border-width: 1rpx;
+		background-color: #FFFFFF;
+	}
+	.popup_head_view{
+		display: flex;
+		flex-direction: row;
+		justify-content: space-between;
+		align-items: center;
+		height: 70rpx;
+	}
+	.close_popup{
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding-right: 30rpx;
+	}
+	
+	.comment-time{
+		color: #5677FC;
+		font-size: 26rpx;
+		padding-top: 10rpx;
+	}
+	
+	.comment_1{
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		padding-left: 20rpx;
+		padding-right: 20rpx;
+	}
+	.video-brief{
+		padding: 2rpx 2rpx 2rpx 10rpx;
+		height: 500rpx;
+		background-color: #fff;
+	}
+	.comment-view{
+		padding: 2rpx 2rpx 2rpx 10rpx;
+		height: 500rpx;
+		background-color: #fff;
+	}
+	.comment {
+		flex: 1;
+		flex-direction: column;
+		align-items: flex-start;
+		justify-content: center;
+		border-bottom-color: #dedede;
+		border-bottom-width: 1rpx;
+		padding: 5rpx;
+	}
+	.uname{
+		font-size: 32rpx;
+		color: #5677FC;
+	}
+	.title-info{
+		font-size: 24rpx;
+		color: #8f8f94;
+		lines: 1;
+		text-overflow: ellipsis;
+	}
+	.reply-time{
+		font-size: 30rpx;
+	}
+	
+	.comment-quote{
+		font-size: 28rpx;
+	}
+	
+	.comment-title {
+		font-size: 30rpx;
+		padding: 5rpx;
+	}
+
+	.operate-icon-1{
+		margin-left: 50rpx;
+	}
+	.operate-icon-0{
+		margin-left: 80rpx;
+	}
+	.banner {
+		height: 360upx;
+		position: relative;
+		background-color: #ccc;
+		flex-direction: row;
+		overflow: hidden;
+	}
+
+	.banner-img {
+		flex: 1;
+	}
+
+	.title-area {
+		position: absolute;
+		left: 30upx;
+		right: 30upx;
+		bottom: 30upx;
+		z-index: 11;
+	}
+
+	.title-text {
+		font-size: 32upx;
+		font-weight: 400;
+		line-height: 42upx;
+		lines: 2;
+		color: #ffffff;
+		overflow: hidden;
+	}
+
+	.article-meta {
+		padding: 20upx 30upx;
+		flex-direction: row;
+		align-items: center;
+		justify-content: flex-start;
+	}
+
+	.article-meta-text {
+		color: gray;
+	}
+
+	.author-videos{
+		padding-top: 10rpx;
+	}
+	.article-text {
+		font-size: 26upx;
+		line-height: 50upx;
+		margin: 0 20upx;
+	}
+
+	.article-author {
+		font-size: 30upx;
+	}
+
+	.article-time {
+		font-size: 30upx;
+	}
+
+	.article-content {
+		font-size: 30upx;
+		padding: 0 30upx;
+		margin-bottom: 30upx;
+		overflow: hidden;
+	}
+	
+	.image{
+		height: 260upx;
+	}
+	.video_content{
+		padding: 3 3 3 3;
+		width: 248upx;
+	}
+	.title{
+		font-size: 8upx;
+	}
+</style>
