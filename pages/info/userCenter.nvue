@@ -17,8 +17,8 @@
 			<uni-list-item :show-extra-icon="true" :extra-icon="extraIcon2"  :show-badge="true" title="本地视频" :badge-text="localTotalNum" @tap="goLocal()"/>
 			<uni-list-item :show-extra-icon="true" :extra-icon="extraIcon4" title="常见问题" @tap="navigateToPage('/pages/setting/question')"/>
 			<uni-list-item :show-extra-icon="true" :extra-icon="extraIcon5" title="检查更新" @tap="checkUpdate('1')"/>
-			<uni-list-item v-if="login" :show-extra-icon="true" :extra-icon="extraIcon6" title="退出登录" @tap="exitLogin()"/>
-		</uni-list>
+<!-- 			<uni-list-item v-if="login" :show-extra-icon="true" :extra-icon="extraIcon6" title="退出登录" @tap="exitLogin()"/>
+ -->		</uni-list>
 		<view style="display: flex;justify-content: center;margin-top: 80rpx;align-items: center;">
 			<button type="default" @tap="goGithub" style="width: 400rpx;background-color: #ffffff;height: 80rpx;color: #FFFFFF;">
 				点击跳转github
