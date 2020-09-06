@@ -653,6 +653,7 @@
 				let video = new Object();
 				try{
 					let sourceUrl = this.getVideoUrl(html);
+					console.log(sourceUrl);
 					let doc = htmlParser(html.toString().trim());
 					let authorInfoHtmlStr = doc.getElementsByClassName('title-yakov');
 					authorInfoHtmlStr = authorInfoHtmlStr[2].innerHTML
@@ -660,7 +661,7 @@
 					let authorInfo = htmlParser(authorInfoHtmlStr)
 					let authorName =  authorInfo.getElementsByTagName('span')[0];
 					authorName = authorName.innerHTML
-					
+					console.log(authorName);
 					authorName = authorName.substring(0,authorName.indexOf('<a'))
 					let uidLinks = authorInfo.getElementsByTagName('a');
 					let uidStr = ''
@@ -668,6 +669,7 @@
 						let uidLink = uidLinks[i];
 						let href =uidLink.attributes.href;
 						if(href.indexOf('UID') != -1){
+							console.log(href);
 							uidStr = href.substring(href.indexOf('UID=')+4, href.length);
 						}
 						
@@ -810,6 +812,9 @@
 							position:'bottom'
 						});
 						this.sourceUrl = sourceUrl
+						setTimeout(() => {
+						    this.videoContext.play()
+						}, 200)
 					}
 				}
 			},
@@ -849,13 +854,13 @@
 					console.log(isValid);
 					if (isValid) {
 						this.setVideoUrl(source_str)
-						return;
+						return source_str;
 					}
 				}catch(e){
 					//TODO handle the exception
 				}
 				
-				this.getVideoUrl3(html);
+				return this.getVideoUrl3(html);
 				
 			},
 			getUserId(){
