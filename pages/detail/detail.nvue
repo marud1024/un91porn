@@ -130,7 +130,7 @@
 					uni.showToast({title: '分享成功'});
 				}, function(e) {
 					uni.showToast({title: '分享失败'});
-					//console.log('分享失败：' + JSON.stringify(e));
+					console.log('分享失败：' + JSON.stringify(e));
 				});
 				//#endif
 			}else{
@@ -148,7 +148,7 @@
 			} catch (error) {
 				this.video = JSON.parse(event.query);
 			}
-			//console.log(this.video);
+			console.log(this.video);
 			uni.setNavigationBarTitle({
 				title: this.video.title
 			});
@@ -181,11 +181,11 @@
 			// #endif
 		},
 		onUnload() {
-			//console.log('onUnload');
+			console.log('onUnload');
 			this.videoContext.pause();
 		},
 		onHide() {
-			//console.log('onHide');
+			console.log('onHide');
 			this.videoContext.pause();
 		},
 		methods: {
@@ -237,7 +237,7 @@
 				this.commentNum = commentNum
 				if(commentNum > 0){
 					let url =getApp().globalData.apiUrl + "/show_comments2.php?VID=" + this.video.videoId + "&start=1&comment_per_page=20"
-					//console.log(url);
+					console.log(url);
 					uni.request({
 					    url: url,
 					    data: {},
@@ -252,15 +252,15 @@
 							this.parseComment(res.data.toString().trim())
 					    },
 						fail: (err) => {
-							//console.log(err.errMsg);
+							console.log(err.errMsg);
 						}
 					});
 				}
 			},
 			loadMoreComment(){
-				//console.log('loadMoreComment')
+				console.log('loadMoreComment')
 				let commentTotalPage = parseInt(this.commentNum/20 + 1)
-				//console.log('commentPage:'+this.commentPage + ',commentTotalPage:'+commentTotalPage)
+				console.log('commentPage:'+this.commentPage + ',commentTotalPage:'+commentTotalPage)
 				if(this.commentPage > commentTotalPage){
 					return;
 				}
@@ -278,7 +278,7 @@
 						this.parseComment(res.data.toString().trim())
 				    },
 					fail: (err) => {
-						//console.log(err.errMsg);
+						console.log(err.errMsg);
 					},
 					complete() {
 						this.commentPage = this.commentPage+1
@@ -342,7 +342,7 @@
 					commentArray.push(comment)
 					this.comments.push(comment) 
 				}
-				//console.log(commentArray.length);
+				console.log(commentArray.length);
 				return commentArray
 			},
 			saveSort(num){
@@ -358,14 +358,14 @@
 								title: '评分成功',
 								position:'bottom'
 							});
-							//console.log('saveSort成功');
+							console.log('saveSort成功');
 						},
 						fail: function(e) {
 							uni.showToast({
 								title: '评分失败',
 								position:'bottom'
 							});
-							//console.log('saveSort失败: ' + JSON.stringify(e));
+							console.log('saveSort失败: ' + JSON.stringify(e));
 						}
 					});
 				}
@@ -400,7 +400,7 @@
 						}
 					},
 					fail: (err) => {
-						//console.log(err);
+						console.log(err);
 					}
 				});
 			},
@@ -443,7 +443,7 @@
 				let link = this.video.link
 				let videoKey = this.getVideoKey(link);
 				let sql ="delete from video where video_key='"+videoKey+"'"
-				//console.log(sql);
+				console.log(sql);
 				return new Promise(resolve => {
 					if(this.isOpenDB()){
 						plus.sqlite.executeSql({
@@ -461,7 +461,7 @@
 									title: '取消收藏失败',
 									position:'bottom'
 								});
-								//console.log('cancleCollectVideo失败: ' + JSON.stringify(e));
+								console.log('cancleCollectVideo失败: ' + JSON.stringify(e));
 								resolve('0')
 							}
 						});
@@ -482,25 +482,35 @@
 				let videoKey = this.getVideoKey(link);
 				let sql = "select id, title,datetime(create_date/1000, 'unixepoch') AS createDate,image_url AS imageUrl,source_url AS sourceUrl,ext_info AS extInfo,link,video_key AS videoKey,sort  from video where video_key='"+videoKey+"' order by create_date desc limit 1"
 				return new Promise(resolve => {
-					plus.sqlite.selectSql({
+					plus.sqlite.executeSql({
 						name: 'video',
-						sql: sql,
+						sql: 'CREATE TABLE IF NOT EXISTS video ( "id" INTEGER PRIMARY KEY AUTOINCREMENT, "create_date" VARCHAR(100), "ext_info" VARCHAR (1000), "source_url" VARCHAR (255), "image_url" VARCHAR (255), "link" VARCHAR (255), "title" VARCHAR (255), "owner_id" VARCHAR (255), "video_key" VARCHAR (255) UNIQUE, "vid" VARCHAR (255), "vuid" VARCHAR (255), "view_num" INT (11), "collecte_num" INT (11), "sort" INT (11), "comment_num" INT (11), "user_id" INT (20))',
 						success: function(e) {
-							resolve(e);
+							plus.sqlite.selectSql({
+								name: 'video',
+								sql: sql,
+								success: function(e) {
+									resolve(e);
+								},
+								fail: function(e) {
+									console.log(' isCollectedVideo查询SQL语句失败: ' + JSON.stringify(e));
+								}
+							});
 						},
 						fail: function(e) {
-							//console.log(' isCollectedVideo查询SQL语句失败: ' + JSON.stringify(e));
+							console.log('创建表table失败: ' + JSON.stringify(e));
+							resolve('0')
 						}
 					});
 				});
 			},
 			async collectVideo(){
 				if (this.isCollected == 1) {
-					//console.log('cancleCollectVideo');
+					console.log('cancleCollectVideo');
 					this.cancleCollectVideo()
 				}else{
 					if(this.isOpenDB()){
-						//console.log('getCollectedVideo');
+						console.log('getCollectedVideo');
 						let videos = await this.getCollectedVideo(this.video.link)
 						if(videos !='' && videos.length>0){
 							this.isCollected = 1
@@ -514,7 +524,7 @@
 					}
 					
 					/* let url = getApp().globalData.apiUrl+'/add_favorite.php?VID='+this.video.VID+'&UID=7757915&VUID='+this.video.VUID
-					//console.log(url);
+					console.log(url);
 					uni.request({
 					    url: url,
 					    data: {},
@@ -525,7 +535,7 @@
 								'Accept-Language':'zh-CN,zh;q=0.8,en-US;q=0.6,en;q=0.4'
 						},
 					    success: (res) => {
-							//console.log(res)
+							console.log(res)
 							if (res.data == '0') {
 								uni.showToast({
 									title: '收藏成功',
@@ -536,7 +546,7 @@
 							}
 					    },
 						fail: (err) => {
-							//console.log(err.errMsg);
+							console.log(err.errMsg);
 						}
 					}); */
 					let res = await this.saveCollectVideo2DB()
@@ -547,7 +557,7 @@
 							position:'bottom'
 						});
 					}
-					//console.log(res)
+					console.log(res)
 				}
 				
 			},
@@ -580,7 +590,7 @@
 									name: 'video',
 									sql: sql,
 									success: function(e) {
-										//console.log('创建表table和插入数据成功');
+										console.log('创建表table和插入数据成功');
 										resolve('1')
 									},
 									fail: function(e) {
@@ -588,7 +598,7 @@
 											title: '本地收藏失败',
 											position:'bottom'
 										});
-										//console.log('创建表table成功但插入数据失败: ' + JSON.stringify(e));
+										console.log('创建表table成功但插入数据失败: ' + JSON.stringify(e));
 										resolve('0')
 									}
 								});
@@ -598,7 +608,7 @@
 									title: '本地收藏失败',
 									position:'bottom'
 								});
-								//console.log('创建表table失败: ' + JSON.stringify(e));
+								console.log('创建表table失败: ' + JSON.stringify(e));
 								resolve('0')
 							}
 						});
@@ -632,7 +642,7 @@
 						if (JSON.stringify(video) != '{}') {
 							this.video = video
 						}
-					   //console.log('play online')
+					   console.log('play online')
 					   setTimeout(() => {
 					       this.videoContext.play()
 					   }, 200)
@@ -641,7 +651,7 @@
 					   this.getComment()
 				    },
 					fail: (err) => {
-						//console.log(err.errMsg);
+						console.log(err.errMsg);
 						uni.showToast({
 							title: '连接超时,请刷新重试',
 							position:'bottom'
@@ -655,7 +665,7 @@
 				let video = new Object();
 				try{
 					let sourceUrl = this.getVideoUrl(html);
-					//console.log(sourceUrl);
+					console.log(sourceUrl);
 					let doc = htmlParser(html.toString().trim());
 					let authorInfoHtmlStr = doc.getElementsByClassName('title-yakov');
 					authorInfoHtmlStr = authorInfoHtmlStr[2].innerHTML
@@ -663,7 +673,7 @@
 					let authorInfo = htmlParser(authorInfoHtmlStr)
 					let authorName =  authorInfo.getElementsByTagName('span')[0];
 					authorName = authorName.innerHTML
-					//console.log(authorName);
+					console.log(authorName);
 					authorName = authorName.substring(0,authorName.indexOf('<a'))
 					let uidLinks = authorInfo.getElementsByTagName('a');
 					let uidStr = ''
@@ -671,7 +681,7 @@
 						let uidLink = uidLinks[i];
 						let href =uidLink.attributes.href;
 						if(href.indexOf('UID') != -1){
-							//console.log(href);
+							console.log(href);
 							uidStr = href.substring(href.indexOf('UID=')+4, href.length);
 						}
 						
@@ -688,11 +698,11 @@
 					videoDesc = videoDesc.substring(videoDesc.indexOf(':')+1,videoDesc.length);
 					let link = this.video.link
 					let videoKey = this.getVideoKey(link);
-					//console.log(sourceUrl);
+					console.log(sourceUrl);
 					let sourceUrl2 = sourceUrl.substring(0,sourceUrl.indexOf("?"));
 					let startIndex = sourceUrl2.lastIndexOf("/");
 					let endIndex = sourceUrl2.indexOf(".mp4");
-					//console.log(sourceUrl2);
+					console.log(sourceUrl2);
 					let videoId = sourceUrl2.substring(startIndex + 1, endIndex);
 					
 					let VID = doc.getElementById('VID');
@@ -725,7 +735,7 @@
 					video.collectNum= collectNum
 					video.commentNum= commentNum
 				}catch(err){
-					//console.log(err)
+					console.log(err)
 				}
 				return video;
 			},
@@ -741,7 +751,7 @@
 					data: {},
 					success: (res) => {
 						let statusCode = res.statusCode
-						//console.log(statusCode);
+						console.log(statusCode);
 						if (statusCode == 200) {
 							return true
 						}else{
@@ -750,7 +760,7 @@
 					},
 					fail: (err) => {
 						return false
-						//console.log(err.errMsg);
+						console.log(err.errMsg);
 					}
 				});	
 				return false
@@ -759,9 +769,9 @@
 				let doc = htmlParser(html.toString().trim());
 				try{
 					let sourceDoc =  doc.getElementsByTagName('source')[0];
-					//console.log(sourceDoc);
+					console.log(sourceDoc);
 					let source_str =  sourceDoc.attributes.src;
-					//console.log(source_str);
+					console.log(source_str);
 					if (source_str != '') {
 						return source_str;
 					}
@@ -774,7 +784,7 @@
 				try{
 					let videoText = doc.getElementById('fm-video_link');
 					let videoText2 = videoText.innerHTML
-					//console.log(videoText2);
+					console.log(videoText2);
 					uni.request({
 						url: videoText2,
 						data: {},
@@ -788,9 +798,9 @@
 							let doc2 = htmlParser(res.data.trim());
 							let sourceDoc =  doc2.getElementsByTagName('source')[0];
 							let source_str =  sourceDoc.attributes.src;
-							//console.log(source_str);
+							console.log(source_str);
 							// let isValid = this.isValidUrl(source_str)
-							// //console.log(isValid);
+							// console.log(isValid);
 							// if (source_str != '' && isValid) {
 								
 							// }
@@ -798,7 +808,7 @@
 							return source_str
 						},
 						fail: (err) => {
-							//console.log(err.errMsg);
+							console.log(err.errMsg);
 						}
 					});
 				}catch(e){
@@ -806,7 +816,7 @@
 				return '';
 			},
 			setVideoUrl(sourceUrl){
-				//console.log('sourceUrl:'+sourceUrl);
+				console.log('sourceUrl:'+sourceUrl);
 				if(!this.isDownload){
 					if(sourceUrl != ''){
 						uni.showToast({
@@ -824,9 +834,9 @@
 				console.log('getVideoUrl');
 				let source_str = ""
 				/* let source_str = this.getVideoUrl2(html);
-				//console.log(source_str);
+				console.log(source_str);
 				// let isValid = this.isValidUrl(source_str)
-				// //console.log(isValid);
+				// console.log(isValid);
 				if (source_str != '') {
 					this.setVideoUrl(source_str)
 					return source_str;
@@ -855,7 +865,9 @@
 					}
 					source_str = atob(source_str)
 					console.log(source_str)
-					source_str = source_str.substring(source_str.indexOf('http'))
+					let doc = htmlParser(source_str);
+					let sourceDoc =  doc.getElementsByTagName('source')[0];
+					source_str = sourceDoc.attributes.src;
 					console.log(source_str)
 					this.setVideoUrl(source_str)
 					return source_str;
@@ -898,7 +910,7 @@
 				if(isLocalExists){
 					this.isDownload=true;
 					this.sourceUrl = this.localVideoPath
-					//console.log("local video exists:"+this.localVideoPath)
+					console.log("local video exists:"+this.localVideoPath)
 					uni.setNavigationBarTitle({
 						title: '(本地)'+this.video.title
 					});
@@ -906,13 +918,13 @@
 			},
 			deleteLocalFile() {
 				let filename = '_downloads/'+this.video.title+'.mp4'
-				//console.log("checkLocalFile:"+filename)
+				console.log("checkLocalFile:"+filename)
 				plus.io.resolveLocalFileSystemURL(filename, (entry) => {
 					this.localVideoPath = plus.io.convertLocalFileSystemURL(filename);
-					//console.log("remove tmp video:"+this.localVideoPath)
+					console.log("remove tmp video:"+this.localVideoPath)
 					entry.remove()
 				}, (e) => {
-					//console.log("local tmp video not exists:"+filename)
+					console.log("local tmp video not exists:"+filename)
 				})
 			},
 			moveVideo(path){
@@ -926,7 +938,7 @@
 				var file = new File(path);
 				var newFile = new File(filePath);
 				file.renameTo(newFile)
-				//console.log('move file to:'+filePath);
+				console.log('move file to:'+filePath);
 			},
 			getLocalVideoImage(){
 				var environment = plus.android.importClass("android.os.Environment");
@@ -943,7 +955,7 @@
 						var imageTmpUrl = ret.image;
 						imageTmpUrl = imageTmpUrl.replace('file:///storage/emulated/0/','')
 						imageTmpUrl = sdRoot + "/VideoCropImage/image_videoimage.jpg"
-						//console.log("imageTmpUrl: " + imageTmpUrl);
+						console.log("imageTmpUrl: " + imageTmpUrl);
 						var tmpFile = new File(imageTmpUrl);
 						tmpFile.renameTo(imageFile)
 					 });
@@ -958,9 +970,9 @@
 				var downloadDir = new File(dirPath);
 				if(!downloadDir.exists()){
 					var res = downloadDir.mkdirs();
-					//console.log("downloadDir mkdirs:"+res);
+					console.log("downloadDir mkdirs:"+res);
 				}else{
-					//console.log("downloadDir is exists");
+					console.log("downloadDir is exists");
 				}
 			},
 			downloadVideo() {
@@ -993,7 +1005,7 @@
 						});
 						this.downloadStatus = false
 						this.localVideoPath = plus.io.convertLocalFileSystemURL(filename); //获取真实本地url路径
-						//console.log('tmp video download complete,move path:'+this.localVideoPath);
+						console.log('tmp video download complete,move path:'+this.localVideoPath);
 						//this.moveVideo(this.localVideoPath) 下载退出页面时 下载会继续但会移动失败
 						var environment = plus.android.importClass("android.os.Environment");
 						var flag = environment.getExternalStorageState() === environment.MEDIA_MOUNTED;
@@ -1004,7 +1016,7 @@
 						var file = new File(this.localVideoPath);
 						var newFile = new File(filePath);
 						file.renameTo(newFile)
-						//console.log('move file to:'+filePath);
+						console.log('move file to:'+filePath);
 						this.isDownload=true;
 					}
 					if(download.state == 3){
@@ -1020,13 +1032,13 @@
 			},
 			deleteVideoImage() {
 				let filename = '_downloads/'+this.video.title+'.mp4.jpg'
-				//console.log("checkLocalVideoImage:"+filename)
+				console.log("checkLocalVideoImage:"+filename)
 				plus.io.resolveLocalFileSystemURL(filename, (entry) => {
 					this.localVideoPath = plus.io.convertLocalFileSystemURL(filename); 
-					//console.log("remove tmp video:"+this.localVideoPath)
+					console.log("remove tmp video:"+this.localVideoPath)
 					entry.remove()
 				}, (e) => {
-					//console.log("local tmp VideoImage not exists:"+filename)
+					console.log("local tmp VideoImage not exists:"+filename)
 				})
 			},
 			downloadVideoImage() {
@@ -1039,7 +1051,7 @@
 				dtask.addEventListener("statechanged", (download, status) => {
 					if (download.state == 4 && status == 200) {
 						var localVideoImagePath= plus.io.convertLocalFileSystemURL(filename); //获取真实本地url路径
-						//console.log('tmp video image download complete,move path:'+localVideoImagePath);
+						console.log('tmp video image download complete,move path:'+localVideoImagePath);
 						this.moveVideoImage(localVideoImagePath)
 					}
 				}, false);
@@ -1057,17 +1069,17 @@
 				var newFile = new File(filePath);
 				if (newFile != null && newFile.exists()){
 					newFile.delete();
-					//console.log("delete exists old image" );
+					console.log("delete exists old image" );
 				}
 				file.renameTo(newFile)
-				//console.log('move video image file to:'+filePath);
+				console.log('move video image file to:'+filePath);
 			},
 			playLocalVideo() {
 				uni.setNavigationBarTitle({
 					title: '(本地)'+this.video.title
 				});
 				this.video.title = '(本地)'+this.video.title
-				//console.log('play local');
+				console.log('play local');
 				this.video.sourceUrl=this.localVideoPath;
 				this.video.imageUrl='';
 				setTimeout(() => {
@@ -1080,11 +1092,11 @@
 					name: 'video',
 					path: '_doc/marud1024.db',
 					success: function(e) {
-						//console.log('打开数据库marud1024.db成功 ');
+						console.log('打开数据库marud1024.db成功 ');
 						return true
 					},
 					fail: function(e) {
-						//console.log('打开数据库marud1024.db失败: ' + JSON.stringify(e));
+						console.log('打开数据库marud1024.db失败: ' + JSON.stringify(e));
 						return false
 					}
 				});
@@ -1099,10 +1111,10 @@
 					})
 				) {
 					return true
-					//console.log('db Opened!');
+					console.log('db Opened!');
 				} else {
 					return this.openDB()
-					//console.log('db Unopened!');
+					console.log('db Unopened!');
 				}
 				// #endif
 			},
