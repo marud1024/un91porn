@@ -832,15 +832,14 @@
 			},
 			getVideoUrl(html){
 				console.log('getVideoUrl');
-				let source_str = ""
-				/* let source_str = this.getVideoUrl2(html);
+				let source_str = this.getVideoUrl2(html);
 				console.log(source_str);
 				// let isValid = this.isValidUrl(source_str)
 				// console.log(isValid);
 				if (source_str != '') {
 					this.setVideoUrl(source_str)
 					return source_str;
-				} */
+				}
 				
 				try{
 					//页面解密获取地址
